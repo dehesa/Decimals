@@ -1,6 +1,7 @@
 import Decimals
 import Foundation
 
+/// Namespace listing all benchmarking functions.
 internal enum Benchmark {
     /// Benchmark for `Double` (64-bit) operations `+`, `*`, `/`, and conversion to `String`.
     /// - parameter start: The starting value for the calculations.
