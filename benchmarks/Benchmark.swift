@@ -2,11 +2,9 @@ import Decimals
 import Foundation
 
 internal enum Benchmark {
-    /// This is a small benchmark for +,*,/ and conversion to string
-    /// Version for builtin Double (64bit)
-    ///
-    /// - Parameter start: the starting value for the calculations in the
-    /// - Returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
+    /// Benchmark for `Double` (64-bit) operations `+`, `*`, `/`, and conversion to `String`.
+    /// - parameter start: The starting value for the calculations.
+    /// - returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
     static func double(start: Double) -> String  {
         var s = start
         s /= Double(10) // my value in sec
@@ -30,11 +28,9 @@ internal enum Benchmark {
 }
 
 extension Benchmark {
-    /// This is a small benchmark for +,*,/ and conversion to string
-    /// Version for builtin Decimal (160bit)
-    ///
-    /// - Parameter start: the starting value for the calculations in the
-    /// - Returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
+    /// Benchmark for Foundation's `Decimal` (160-bit) operations `+`, `*`, `/`, and conversion to `String`.
+    /// - parameter start: The starting value for the calculations.
+    /// - returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
     static func decimal(start: Decimal) -> String  {
         var s = start
         s /= Decimal(10) // my value in sec
@@ -57,11 +53,9 @@ extension Benchmark {
 }
 
 extension Benchmark {
-    /// This is a small benchmark for +,*,/ and conversion to string
-    /// Version for DecimalFP64 (64bit) which conforms to the FloatingPoint protocol
-    ///
-    /// - Parameter start: the starting value for the calculations in the
-    /// - Returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
+    /// Benchmark for `DecimalFP64` (64-bit) operations `+`, `*`, `/`, and conversion to `String`.
+    /// - parameter start: The starting value for the calculations.
+    /// - returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
     static func decimalFP64(start: DecimalFP64) -> String  {
         var s = start
         s /= DecimalFP64(10) // my value in sec
@@ -84,11 +78,9 @@ extension Benchmark {
 }
 
 extension Benchmark {
-    /// This is a small benchmark for +,*,/ and conversion to string
-    /// Version for Decimal64 (64bit) which does NOT conforms to the FloatingPoint protocol
-    ///
-    /// - Parameter start: the starting value for the calculations in the
-    /// - Returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
+    /// Benchmark for `Decimal` (64-bit) operations `+`, `*`, `/`, and conversion to `String`.
+    /// - parameter start: The starting value for the calculations.
+    /// - returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
     static func decimal64(start: Decimal64) -> String  {
         var s = start
         s /= Decimal64(10) // my value in sec
@@ -111,12 +103,11 @@ extension Benchmark {
 }
 
 extension Benchmark {
-    /// This is a small benchmark for +,*,/ and conversion to string
+    /// Benchmark for types conforming to `FloatingPoint` operations `+`, `*`, `/`, and conversion to `String`.
     ///
     /// The template version (only useful for Double and DecimalFP64, slower by ~40% than non template version)
-    ///
-    /// - Parameter start: the starting value for the calculations in the
-    /// - Returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
+    /// - parameter start: The starting value for the calculations.
+    /// - returns: A string result of the numbers (to compare results and to make sure that the string conversion is not optimized away)
     static func genericFloatingPoint<T>(start: T) -> String where T:FloatingPoint, T:ExpressibleByFloatLiteral  {
         var s = start
         s /= T(10) // my value in sec

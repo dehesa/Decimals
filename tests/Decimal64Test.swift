@@ -22,7 +22,7 @@ final class Decimal64Test: XCTestCase {
 //            a *= 10
 //        }
 //    }
-//
+
 //    func testCompareLess() {
 //        // This is an example of a functional test case.
 //        // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -33,7 +33,7 @@ final class Decimal64Test: XCTestCase {
 //        let d = Decimal64( 123, withExponent: 10 )!
 //        XCTAssert(c < d)
 //    }
-//
+
 //    func testCompareEqual() {
 //        // This is an example of a functional test case.
 //        // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -41,7 +41,7 @@ final class Decimal64Test: XCTestCase {
 //        let b = Decimal64(100, withExponent: -2 )!
 //        XCTAssert(a == b)
 //    }
-//
+
 //    func testPerformanceDouble() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -51,6 +51,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
+    
 //    func testPerformanceDecimal() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -60,6 +61,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
+    
 //    func testPerformanceDecimalFP64() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -69,7 +71,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-//
+
 //    func testPerformanceDecimal64() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -79,7 +81,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-//
+
 //    func testPerformanceDecimalFP64Template() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -89,6 +91,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
+    
 //    func testPerformanceDoubleTemplate() {
 //        // This is an example of a performance test case.
 //        self.measure {

@@ -1,46 +1,58 @@
 import Foundation
 
+extension Decimal64 {
+    /// The type used to store both the mantissa and the exponent.
+    @usableFromInline internal typealias Storage = Int64
+    /// A type that represents the encoded significand of a value.
+    public typealias Significand = Int64
+    /// A type that can represent any written exponent.
+    public typealias Exponent = Int
+    
+    /// The radix, or base of exponentiation, for a floating-point type.
+    public static let radix = 10
+    /// The bit-size of the internal exponent.
+    public static let exponentBitCount = 9
+    /// The bit-size of the internal mantissa.
+    public static let significandBitCount = 55
+    /// The minimum exponent.
+    private static let leastExponent: Int = -256
+    /// The maximum exponent.
+    private static let greatestExponent: Int = 255
+    /// Bit-mask matching the exponent.
+    private static let EXP_MASK = Int64(bitPattern: 0x1FF)
+    /// Bit-mask matching the sign bit.
+    private static let SIGN_MASK = Int64(bitPattern: 0x8000000000000000)
+}
+
 /// Complete new implementation for a decimal type.
 ///
-/// It uses 55 bit for mantissa and 9 bit for exponent; both will be stored as a twos complement in case of negative numbers.
+/// It uses 55 bit for the significand and 9 bit for exponent; both will be stored as twos complement in case of negative numbers.
+/// The significand doesn't have to be normalized.
 ///
 ///     63                                          9 8            0
 ///     +--------------------------------------------+-----------+
-///     |                  mantissa                  |  exponent |
+///     |                significand                 |  exponent |
 ///     +--------------------------------------------+-----------+
+///
 public struct Decimal64 {
-    /// A type that can represent any written exponent.
-    public typealias Exponent = Int
-    /// A type that represents the encoded significand of a value.
-    public typealias Mantissa = Int64
-    public typealias InternalType = Int64
-
-    // not sure if this is ever needed (was included in FloatingPoint)
-    public static let radix = 10
-    internal static let EXP_SIZE = 9
-    internal static let MAN_SIZE = 55
-    internal static let EXP_MASK = Int64(bitPattern: 0x1FF)  ///< bitmask for exponent
-    internal static let SIG_MASK = Int64(bitPattern: 0x8000000000000000)
-    internal static let EXP_MIN = -256
-    internal static let EXP_MAX = 255
-
-    private var _data: InternalType = 0
-
-    // we will not silently convert numbers with more than 16 digits to Decimal
-    public init?(_ man: Mantissa) {
-        guard Swift.abs(man) < 10_000_000_000_000_000 else { return nil }
-        _data = man << Decimal64.EXP_SIZE
+    /// Internal storage.
+    @usableFromInline internal var _data: Storage = 0
+    
+    /// Designated initializer passing the exact bytes for the internal storage.
+    /// - attention: Be extremely careful using this initializer.
+    @usableFromInline internal init(storage: Storage) {
+        self._data = storage
     }
 
-    public init?(_ man: Mantissa, withExponent exp: Exponent) {
-        guard Swift.abs(man) < 10_000_000_000_000_000,
-              ( exp >= -256 ) && (exp <= 255 ) else { return nil }
+    // we will not silently convert numbers with more than 16 digits to Decimal
+    public init?(_ man: Significand, withExponent exp: Exponent) {
+        guard Swift.abs(man) < 10_000_000_000_000_000, (exp >= -256) && (exp <= 255) else { return nil }
         let newExp = ( man < 0 ) ? -exp: exp
-        _data = ( man << Decimal64.EXP_SIZE ) | (InternalType(newExp) & Decimal64.EXP_MASK )
+        self._data = ( man << Self.exponentBitCount ) | (Storage(newExp) & Self.EXP_MASK )
     }
 
     public init?(_ value: Double) {
-        let isNegative = ( value < 0 )
+        let isNegative = value < 0
         let value = Swift.abs(value)
         let exp = Int( log10( value ) - 15 )
         let man = Int64( value / pow( 10.0, Double(exp) ) + 0.5 )
@@ -49,45 +61,46 @@ public struct Decimal64 {
     }
 
     /// returns the mantissa with a simple bit shift. This will remove the exponent automatically
-    var mantissa: Mantissa {
-        return _data >> Decimal64.EXP_SIZE
+    public var significand: Significand {
+        self._data >> Decimal64.exponentBitCount
     }
 
     // the whole internal values is the 2's complement, to access the exponent we have to use the absolute value
-    var exponent: Exponent {
-        let absolute = (_data < 0) ? -_data : _data
+    public var exponent: Exponent {
+        let absolute = (self._data < 0) ? -self._data : self._data
         // the left-shift right-shift sequence restores the sign of the exponent
-        return Exponent((( absolute & Decimal64.EXP_MASK ) << Decimal64.MAN_SIZE ) >> Decimal64.MAN_SIZE)
+        return Exponent((( absolute & Decimal64.EXP_MASK ) << Decimal64.significandBitCount ) >> Decimal64.significandBitCount)
     }
 
     public var sign: Bool {
-        return _data < 0
+        return self._data < 0
     }
 
     public var floatingPointSign: FloatingPointSign {
-        if sign {
+        if self.sign {
             return .minus
         } else {
             return .plus
         }
     }
+    
     /// Mutating operations on the sign
     mutating func abs() {
-        if _data < 0 {
-            _data = -_data
+        if self._data < 0 {
+            self._data = -self._data
         }
     }
 
     mutating func minus() {
-        _data = -_data
+        self._data = -self._data
     }
 
     public static var greatestFiniteMagnitude: Decimal64 {
-        return Decimal64(9_999_999_999_999_999, withExponent: EXP_MAX )!
+        return Decimal64(9_999_999_999_999_999, withExponent: greatestExponent )!
     }
 
     public static var leastNonzeroMagnitude: Decimal64 {
-        return Decimal64(1, withExponent: EXP_MIN )!
+        return Decimal64(1, withExponent: Decimal64.leastExponent)!
     }
 
     public func adding(_ other: Decimal64) -> Decimal64 {
@@ -149,18 +162,12 @@ public struct Decimal64 {
      }
      */
 
-    /// Round a Decimal64 according to the given digits and rounding method.
-    ///
-    /// @param   scale      The number of digits right from the decimal point.
-    /// @param   method     The rounding method. @see Decimal64::RoundingMethod
-    /// @retval  Decimal64      The rounded number.
-    mutating func round( _ scale: Int, _ method: FloatingPointRoundingRule )
-    {
+    mutating func round( _ scale: Int, _ method: FloatingPointRoundingRule) {
         let expScale = exponent + scale
 
         //TODO: should work with negative scale
         if expScale < 0 {
-            var man = mantissa
+            var man = significand
             let sig = (_data < 0)
 
             var remainder: Int64 = 0
@@ -206,31 +213,29 @@ public struct Decimal64 {
                 fatalError()
             }
 
-            _data = man << Decimal64.EXP_SIZE
-            _data |= Int64( -scale )
+            self._data = man << Decimal64.exponentBitCount
+            self._data |= Int64( -scale )
             if sig {
-                _data = -_data
+                self._data = -self._data
             }
         }
     }
 
     // Arithmetical operations (see GDA specification) they all return *this
-    static func round( _ op: Decimal64, _ exp: Int = 0, _ method: FloatingPointRoundingRule = .toNearestOrAwayFromZero ) -> Decimal64
-    {
-        var ret = op
-        ret.round(exp, method)
-        return ret
+    static func round( _ op: Decimal64, _ exp: Int = 0, _ method: FloatingPointRoundingRule = .toNearestOrAwayFromZero ) -> Decimal64 {
+        var result = op
+        result.round(exp, method)
+        return result
     }
 
-    public func rounded(_ rule: FloatingPointRoundingRule) -> Decimal64
-    {
-        var this = self
-        this.round(rule)
-        return this
+    public func rounded(_ rule: FloatingPointRoundingRule) -> Decimal64 {
+        var result = self
+        result.round(rule)
+        return result
     }
 
     public mutating func round(_ rule: FloatingPointRoundingRule) {
-        round( 0, rule)
+        self.round( 0, rule)
     }
 
     public func isEqual(to other: Decimal64) -> Bool {
@@ -262,7 +267,7 @@ public struct Decimal64 {
         }
 
         if  man == 0 {
-            _data = 0
+            self._data = 0
         }
         else
         {
@@ -286,7 +291,7 @@ public struct Decimal64 {
                 }
             }
 
-            _data = man << Decimal64.EXP_SIZE
+            _data = man << Decimal64.exponentBitCount
 
             // try denormalization if possible
             if exp > 253 {
@@ -301,7 +306,7 @@ public struct Decimal64 {
                 }
             }
             else if exp != 0 {
-                _data |=  (InternalType(exp) & Decimal64.EXP_MASK )
+                _data |=  (Storage(exp) & Decimal64.EXP_MASK )
             }
         }
 
@@ -326,37 +331,13 @@ public struct Decimal64 {
 
     public func normalized() -> Decimal64 {
         /// make exp as small as possible (min is -256)
-        if mantissa == 0 {
+        if significand == 0 {
             return Decimal64(0)
         } else {
-            var man = mantissa
+            var man = significand
             var exp = exponent
             exp -= toMaximumDigits( &man )
             return Decimal64( man, withExponent: exp)!
-        }
-    }
-
-    ///  Compare two Decimal64.
-    ///
-    /// @param   left  Number to compare.
-    /// @param   right  Number to compare.
-    ///
-    /// @retval  true   A is smaller than B ( A < B ).
-    /// @retval  false  A is bigger or equal to B ( A >= B ).
-    public static func <( _ left: Decimal64, _ right: Decimal64 ) -> Bool
-    {
-        if  left._data == right._data {
-            return false
-        }
-        let l = left.normalized()
-        let r = right.normalized()
-
-        if l.exponent == r.exponent {
-            return l.mantissa < r.mantissa
-        } else if l.exponent < r.exponent {
-            return !r.sign
-        } else {
-            return l.sign
         }
     }
 
@@ -364,29 +345,25 @@ public struct Decimal64 {
     ///  All signs are ignored !
     ///
     /// @param   right    Summand.
-    mutating func addToThis( _ right: Decimal64, _ negative: Bool )
-    {
+    mutating func addToThis(_ right: Decimal64, _ negative: Bool) {
         var myExp = exponent
         var otherExp = right.exponent
 
         // Calculate new coefficient
-        var myMan = mantissa
-        var otherMan = right.mantissa
+        var myMan = significand
+        var otherMan = right.significand
 
         if otherMan == 0 {
             // Nothing to do because NumB is 0.
-        }
-        else if myExp == otherExp {
+        } else if myExp == otherExp {
             setComponents( myMan + otherMan, myExp, negative )
-        }
-        else if ( myExp < otherExp - 32 ) || ( myMan == 0 ) {
+        } else if ( myExp < otherExp - 32 ) || ( myMan == 0 ) {
             // This is too small, therefore sum is completely sign * |NumB|.
             _data = right._data
             if negative {
                 _data = -_data
             }
-        }
-        else if ( myExp <= otherExp + 32 ) {
+        } else if ( myExp <= otherExp + 32 ) {
             // -32 <= myExp - otherExp <= 32
             if ( myExp < otherExp ) {
                 // Make otherExp smaller.
@@ -405,8 +382,7 @@ public struct Decimal64 {
                     myMan /= PowerOf10[ otherExp - myExp ]
                     myExp = otherExp
                 }
-            }
-            else {
+            } else {
                 // Make myExp smaller.
                 myExp -= int64_shiftLeftTo17orLim( &myMan, min( 17, myExp - otherExp ) )
                 if ( myExp != otherExp ) {
@@ -422,8 +398,7 @@ public struct Decimal64 {
 
             // Now both exponents are equal.
             setComponents( myMan + otherMan, myExp, negative )
-        }
-        else {
+        } else {
             // Nothing to do because NumB is too small
             // otherExp < myExp - 32.
         }
@@ -436,42 +411,31 @@ public struct Decimal64 {
     /// - Parameters:
     ///   - right: Subtrahend
     ///   - negative: flag if ... is negative
-    mutating func subtractFromThis( _ right: Decimal64, _ negative: Bool )
-    {
+    mutating func subtractFromThis(_ right: Decimal64, _ negative: Bool) {
         var myExp = exponent
         var otherExp = right.exponent
 
         // Calculate new coefficient
-        var myMan = mantissa
-        var otherMan = right.mantissa
+        var myMan = significand
+        var otherMan = right.significand
 
-        if ( otherMan == 0 )
-        {
+        if ( otherMan == 0 ) {
             // Nothing to do because NumB is 0.
-        }
-        else if ( myExp == otherExp )
-        {
+        } else if ( myExp == otherExp ) {
             setComponents( myMan - otherMan, myExp, negative );
-        }
-        else if ( ( myExp < otherExp - 32 ) || ( myMan == 0 ) )
-        {
+        } else if ( ( myExp < otherExp - 32 ) || ( myMan == 0 ) ) {
             // This is too small, therefore difference is completely -sign * |NumB|.
             _data = right._data
             if !negative {
                 _data = -_data
             }
-        }
-        else if ( myExp <= otherExp + 32 )
-        {
+        } else if ( myExp <= otherExp + 32 ) {
             // -32 <= myExp - otherExp <= 32
-            if ( myExp < otherExp )
-            {
+            if ( myExp < otherExp ) {
                 // Make otherExp smaller.
                 otherExp -= int64_shiftLeftTo17orLim( &otherMan, min( 17, otherExp - myExp ) );
-                if ( myExp != otherExp )
-                {
-                    if ( otherExp > myExp + 16 )
-                    {
+                if ( myExp != otherExp ) {
+                    if ( otherExp > myExp + 16 ) {
                         // This is too small, therefore difference is completely -sign * |NumB|.
                         _data = right._data
                         if !negative {
@@ -484,15 +448,11 @@ public struct Decimal64 {
                     myMan /= PowerOf10[ otherExp - myExp ];
                     myExp = otherExp;
                 }
-            }
-            else
-            {
+            } else {
                 // Make myExp smaller.
                 myExp -= int64_shiftLeftTo17orLim( &myMan, min( 17, myExp - otherExp ) );
-                if ( myExp != otherExp )
-                {
-                    if ( myExp > otherExp + 16 )
-                    {
+                if ( myExp != otherExp ) {
+                    if ( myExp > otherExp + 16 ) {
                         // Nothing to do because NumB is too small
                         return;
                     }
@@ -504,36 +464,16 @@ public struct Decimal64 {
 
             // Now both exponents are equal.
             setComponents( myMan - otherMan, myExp, negative );
-        }
-        else
-        {
+        } else {
             // Nothing to do because NumB is too small (myExp > otherExp + 32).
         }
 
     }
 
-    public static func +(_ left: Decimal64, _ right: Decimal64) -> Decimal64 {
-        var ret = left
-        ret += right
-        return ret
-    }
-
-    public static func -(_ left: Decimal64, _ right: Decimal64) -> Decimal64 {
-        var ret = left
-        ret -= right
-        return ret
-    }
-
-    public static func *(_ left: Decimal64, _ right: Decimal64) -> Decimal64 {
-        var ret = left
-        ret *= right
-        return ret
-    }
-
-    public static func /(_ left: Decimal64, _ right: Decimal64) -> Decimal64 {
-        var ret = left
-        ret /= right
-        return ret
+    public static func /(_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+        var result = lhs
+        result /= rhs
+        return result
     }
 
     ///  assignment decimal shift left
@@ -541,9 +481,8 @@ public struct Decimal64 {
     /// @param   shift     Number of decimal digits to shift to the left.
     ///
     /// @retval  Decimal64 ( this * 10^shift )
-    public static func <<=( _ left: inout Decimal64, _ shift: Int )
-    {
-        left.setComponents( left.mantissa, left.exponent + shift, left.sign )
+    public static func <<= (_ lhs: inout Decimal64, _ shift: Int) {
+        lhs.setComponents( lhs.significand, lhs.exponent + shift, lhs.sign )
     }
 
     ///  assignment decimal shift right
@@ -551,125 +490,8 @@ public struct Decimal64 {
     /// @param   shift     Number of decimal digits to shift to the right.
     ///
     /// @retval  Decimal64 ( this / 10^shift )
-    public static func >>=( _ left: inout Decimal64, _ shift: Int )
-    {
-        left.setComponents( left.mantissa, left.exponent - shift, left.sign )
-    }
-
-    ///  Add a number to this.
-    ///
-    ///    |a| < |b|          |a| > |b|
-    ///  a+b | + | -        a+b | + | -
-    ///  ----+---+---       ----+---+---
-    ///   +  |+a+|+s-        +  |+a+|+s+
-    ///  ----+---+---       ----+---+---
-    ///   -  |-s+|-a-        -  |-s-|-a-
-    ///
-    /// @param    right  Summand.
-    ///
-    /// @retval  ( this + A )
-    public static func += (_ left: inout Decimal64, _ right: Decimal64 )
-    {
-        let sign = left.sign
-
-        if sign == right.sign {
-            left.addToThis( right, sign )
-        }
-        else {
-            left.subtractFromThis( right, sign )
-        }
-    }
-
-    ///  Subtract a number from this.
-    ///
-    ///    |a| < |b|          |a| > |b|
-    ///  a-b | + | -        a-b | + | -
-    ///  ----+---+---       ----+---+---
-    ///   +  |+s-|+a+        +  |+s+|+a+
-    ///  ----+---+---       ----+---+---
-    ///   -  |-a-|-s+        -  |-a-|-s-
-    ///
-    /// @param    right  Subtrahend
-    ///
-    /// @retval  Decimal64 ( this - A )
-    public static func -=(_ left: inout Decimal64, _ right: Decimal64 )
-    {
-        let sign = left.sign
-
-        if  sign == right.sign {
-            left.subtractFromThis( right, sign )
-        }
-        else {
-            left.addToThis( right, sign );
-        }
-    }
-
-    /// Multiply this by a number.
-    ///     newExp = aExp + bExp + shift
-    ///     newMan = ah*bh * 10^(16-shift) + (ah*bl + al*bh) * 10^(8-shift) +
-    ///              al*bl * 10^-shift
-    /// shift is a unique integer so that newMan fits into 54 bits with the
-    /// highest accuracy.
-    ///
-    /// @param   right   Factor.
-    ///
-    /// @retval  Decimal64 ( this * B )
-    public static func *=( _ left: inout Decimal64, _ right: Decimal64 )
-    {
-        var myExp = left.exponent
-        let rightExp = right.exponent
-
-        if ( right._data == 0 || left._data == 0 ) {
-            left._data = 0
-        }
-        else
-        {
-            // Calculate new coefficient
-            var myHigh = left.mantissa
-            let myLow  = myHigh % TenPow8
-            myHigh /= TenPow8
-
-            var otherHigh = right.mantissa
-            let otherLow  = otherHigh % TenPow8
-            otherHigh /= TenPow8
-
-            var newHigh = myHigh * otherHigh
-            var newMid  = myHigh * otherLow + myLow * otherHigh
-            var myMan = myLow * otherLow
-
-            var shift = 0
-
-            if ( newHigh > 0 )
-            {
-                // Make high as big as possible.
-                shift = 16 - int64_shiftLeftTo17_16( &newHigh )
-
-                if ( shift > 8 )
-                {
-                    newMid /= PowerOf10[ shift - 8 ]
-                    myMan /= PowerOf10[ shift ]
-                }
-                else
-                {
-                    newMid *= PowerOf10[ 8 - shift ]
-                    myMan /= PowerOf10[ shift ]
-                }
-
-                myMan += newHigh + newMid
-            }
-            else if ( newMid > 0 )
-            {
-                // Make mid as big as possible.
-                shift = 8 - int64_shiftLeftTo17_8( &newMid )
-                myMan /= PowerOf10[ shift ]
-                myMan += newMid
-            }
-
-            // Calculate new exponent.
-            myExp += rightExp + shift;
-
-            left.setComponents( myMan, myExp, left.sign != right.sign )
-        }
+    public static func >>= (_ lhs: inout Decimal64, _ shift: Int) {
+        lhs.setComponents( lhs.significand, lhs.exponent - shift, lhs.sign )
     }
 
     ///  Divide this by a number.
@@ -685,18 +507,17 @@ public struct Decimal64 {
     /// - Parameters:
     ///   - left: number to be divided
     ///   - right: Divisor
-    public static func /=( _ left: inout Decimal64, _ right: Decimal64 )
-    {
-        var myExp = left.exponent
-        let rightExp = right.exponent
+    public static func /= (_ lhs: inout Decimal64, _ rhs: Decimal64) {
+        var myExp = lhs.exponent
+        let rightExp = rhs.exponent
 
-        var myMan = left.mantissa
-        let otherMan = right.mantissa
+        var myMan = lhs.significand
+        let otherMan = rhs.significand
 
         if ( otherMan == 0 ) {
             fatalError()
         }
-        else if ( myMan != 0 ) && ( right._data != 1 )
+        else if ( myMan != 0 ) && ( rhs._data != 1 )
         {
             // Calculate new coefficient
 
@@ -739,7 +560,7 @@ public struct Decimal64 {
             // Calculate new exponent.
             myExp -= rightExp + mainShift
 
-            left.setComponents( myMan, myExp, left.sign != right.sign )
+            lhs.setComponents( myMan, myExp, lhs.sign != rhs.sign )
         }
     }
 
@@ -759,20 +580,17 @@ public struct Decimal64 {
     ///
     /// - Parameter limit: The maximum value to be returned, otherwise an exception is thrown
     /// - Returns: Self as signed integer
-    func toInt( _ limit: Int64 ) -> Int64
-    {
+    func toInt( _ limit: Int64 ) -> Int64 {
         var exp = exponent
 
-        if ( exp >= -16 )
-        {
-            var man = mantissa
+        if ( exp >= -16 ) {
+            var man = significand
             var shift = 0
 
             if exp < 0 {
                 man /= PowerOf10[ -exp ]
                 exp = 0
-            }
-            else  if ( ( exp > 0 ) && ( exp <= 17 ) ) {
+            } else  if ( ( exp > 0 ) && ( exp <= 17 ) ) {
                 shift = int64_shiftLeftTo17orLim( &man, exp )
             }
 
@@ -782,10 +600,9 @@ public struct Decimal64 {
                 fatalError()
             }
 
-            if sign {
+            if self.sign {
                 return -man
-            }
-            else {
+            } else {
                 return man
             }
         }
@@ -793,73 +610,192 @@ public struct Decimal64 {
         return 0
     }
 
-    public static func !=( _ left: Decimal64, _ right: Decimal64 ) -> Bool {
-        return !( left  == right )
+    public static func << (_ lhs: Decimal64, _ rhs: Int) -> Decimal64 {
+        var result = lhs
+        result <<= rhs
+        return result
     }
 
-    public static func >=( _ left: Decimal64, _ right: Decimal64 ) -> Bool{
-        return !( left  <  right )
-    }
-
-    public static func <=( _ left: Decimal64, _ right: Decimal64 ) -> Bool {
-        return !( right < left )
-    }
-
-    public static func >( _ left: Decimal64, _ right: Decimal64 ) -> Bool {
-        return    right < left
-    }
-
-    public static func<<( _ left: Decimal64, _ right: Int ) -> Decimal64 {
-        var ret = left
-        ret <<= right
-        return ret
-    }
-
-    public static func >>( _ left: Decimal64, _ right: Int ) -> Decimal64 {
-        var ret = left
-        ret >>= right
+    public static func >> (_ lhs: Decimal64, _ rhs: Int) -> Decimal64 {
+        var ret = lhs
+        ret >>= rhs
         return ret
     }
 }
+
+// MARK: -
 
 extension Decimal64: Equatable {
-    /// Compare two Decimals
-    ///
-    /// - Parameters:
-    ///   - left: one value
-    ///   - right: the other value
-    /// - Returns: returns true if both values are the same if normalized
-    public static func ==( _ left: Decimal64, _ right: Decimal64 ) -> Bool
-    {
-        if left._data == right._data {
-            return true
-        }
-
-        if (left.mantissa == 0 ) && (right.mantissa == 0 ) {
-            return true
-        }
-
-        let expDiff = left.exponent - right.exponent
-
-        if  expDiff < 0 {
+    public static func == (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+        guard lhs._data != rhs._data else { return true }
+        
+        let sl = lhs.significand, sr = rhs.significand
+        guard sl != 0 || sr != 0 else { return true }
+        
+        let expDiff = lhs.exponent - rhs.exponent
+        if expDiff < 0 {
             // right has bigger exponent, i.e. smaller mantissa if it is equal
-            var rightMantissa = right.mantissa
+            var rightMantissa = rhs.significand
             let shift = int64_shiftLeftTo17orLim(&rightMantissa, -expDiff)
-            if (shift == -expDiff) && (rightMantissa == left.mantissa) {
-                return true
-            }
-        }
-        else if expDiff > 0 {
+            if (shift == -expDiff) && (rightMantissa == sl) { return true }
+        } else if expDiff > 0 {
             // right has bigger exponent, i.e. smaller mantissa if it is equal
-            var leftMantissa = left.mantissa
+            var leftMantissa = lhs.significand
             let shift = int64_shiftLeftTo17orLim(&leftMantissa, expDiff)
-            if (shift == expDiff) && (leftMantissa == right.mantissa) {
-                return true
-            }
+            if (shift == expDiff) && (leftMantissa == sr) { return true }
         }
+        
         return false
     }
+    
+    public static func != (_ lsh: Decimal64, _ rhs: Decimal64) -> Bool {
+        !(lsh == rhs)
+    }
 }
+
+extension Decimal64: Comparable {
+    public static func < (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+        if lhs._data == rhs._data { return false }
+        
+        let ln = lhs.normalized(), rn = rhs.normalized()
+        let le = ln.exponent, re = rn.exponent
+        
+        if le == re {
+            return ln.significand < rn.significand
+        } else if le < re {
+            return !rn.sign
+        } else {
+            return ln.sign
+        }
+    }
+    
+    @_transparent public static func > (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+        rhs < lhs
+    }
+    
+    @_transparent public static func >= (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool{
+        !(lhs < rhs)
+    }
+    
+    @_transparent public static func <= (_ left: Decimal64, _ right: Decimal64) -> Bool {
+        !(right < left)
+    }
+}
+
+extension Decimal64: AdditiveArithmetic {
+    public static var zero: Decimal64 {
+        .init(storage: 0)
+    }
+    
+    @_transparent public static func + (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+        var result = lhs
+        result += rhs
+        return result
+    }
+    
+    @_transparent public static func - (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+        var result = lhs
+        result -= rhs
+        return result
+    }
+    
+    public static func += (_ lhs: inout Decimal64, _ rhs: Decimal64) {
+        let sign = lhs.sign
+        
+        if sign == rhs.sign {
+            lhs.addToThis(rhs, sign)
+        } else {
+            lhs.subtractFromThis(rhs, sign)
+        }
+    }
+    
+    public static func -=(_ lsh: inout Decimal64, _ rhs: Decimal64) {
+        let sign = lsh.sign
+        
+        if sign == rhs.sign {
+            lsh.subtractFromThis(rhs, sign)
+        } else {
+            lsh.addToThis(rhs, sign);
+        }
+    }
+}
+
+extension Decimal64: Numeric {
+    @_transparent public init?<T>(exactly source: T) where T: BinaryInteger {
+        guard source.magnitude < 10_000_000_000_000_000 else { return nil }
+        self.init(storage: Int64(truncatingIfNeeded: source) << Decimal64.exponentBitCount)
+    }
+    
+    public var magnitude: Decimal64 {
+        var result = self
+        result.abs()
+        return result
+    }
+    
+    @_transparent public static func * (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+        var result = lhs
+        result *= rhs
+        return result
+    }
+    
+    public static func *= (_ left: inout Decimal64, _ right: Decimal64) {
+        var myExp = left.exponent
+        let rightExp = right.exponent
+        
+        if ( right._data == 0 || left._data == 0 ) {
+            left._data = 0
+        } else {
+            // Calculate new coefficient
+            var myHigh = left.significand
+            let myLow  = myHigh % TenPow8
+            myHigh /= TenPow8
+            
+            var otherHigh = right.significand
+            let otherLow  = otherHigh % TenPow8
+            otherHigh /= TenPow8
+            
+            var newHigh = myHigh * otherHigh
+            var newMid  = myHigh * otherLow + myLow * otherHigh
+            var myMan = myLow * otherLow
+            
+            var shift = 0
+            
+            if (newHigh > 0) {
+                // Make high as big as possible.
+                shift = 16 - int64_shiftLeftTo17_16( &newHigh )
+                
+                if (shift > 8) {
+                    newMid /= PowerOf10[ shift - 8 ]
+                    myMan /= PowerOf10[ shift ]
+                } else {
+                    newMid *= PowerOf10[ 8 - shift ]
+                    myMan /= PowerOf10[ shift ]
+                }
+                
+                myMan += newHigh + newMid
+            } else if ( newMid > 0 ) {
+                // Make mid as big as possible.
+                shift = 8 - int64_shiftLeftTo17_8( &newMid )
+                myMan /= PowerOf10[ shift ]
+                myMan += newMid
+            }
+            
+            // Calculate new exponent.
+            myExp += rightExp + shift;
+            
+            left.setComponents( myMan, myExp, left.sign != right.sign )
+        }
+    }
+}
+
+extension Decimal64: ExpressibleByIntegerLiteral {
+    public init(integerLiteral value: Int64) {
+        precondition(Swift.abs(value) < 10_000_000_000_000_000)
+        self.init(storage: value << Decimal64.exponentBitCount)
+    }
+}
+
+// MARK: -
 
 extension Decimal64: CustomStringConvertible {
     public var description: String {
@@ -875,8 +811,7 @@ extension Decimal64: CustomStringConvertible {
     }
 }
 
-extension Decimal64: TextOutputStreamable
-{
+extension Decimal64: TextOutputStreamable {
     public func write<Target>(to target: inout Target) where Target : TextOutputStream {
         var data: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
             UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
@@ -884,7 +819,7 @@ extension Decimal64: TextOutputStreamable
             UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
             ) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
 
-        var man = mantissa
+        var man = significand
 
         if man == 0 {
             target.write("0")
@@ -1002,30 +937,14 @@ extension Decimal64: TextOutputStreamable
     }
 }
 
-extension Decimal64: ExpressibleByFloatLiteral
-{
-    public typealias FloatLiteralType = Double
-
+extension Decimal64: ExpressibleByFloatLiteral {
     // If used as an literal, we assume we can force unwrap it
-    public init(floatLiteral value: Decimal64.FloatLiteralType) {
+    public init(floatLiteral value: Double) {
         self.init( value )!
     }
 }
 
-extension Decimal64: ExpressibleByIntegerLiteral
-{
-    public typealias IntegerLiteralType = Int64
-
-    // If used as an literal, we assume we can force unwrap it
-    public init(integerLiteral value: Decimal64.IntegerLiteralType) {
-        self.init( value )!
-    }
-}
-
-extension Decimal64: ExpressibleByStringLiteral
-{
-    public typealias StringLiteralType = String
-
+extension Decimal64: ExpressibleByStringLiteral {
     /// Reads an Decimal from a string input in the format
     /// ["+"|"-"]? Optional sign
     /// "0".."9"*  any number of digits as integer part
@@ -1154,8 +1073,7 @@ extension Decimal64: ExpressibleByStringLiteral
 /// - Parameters:
 ///   - num: The number to process, must not have more than 18 digits
 /// - Returns: count of shifted digits
-func toMaximumDigits( _ num: inout Int64 ) -> Int
-{
+func toMaximumDigits( _ num: inout Int64 ) -> Int {
     if num == 0 {
         return 0
     }
@@ -1198,8 +1116,7 @@ func toMaximumDigits( _ num: inout Int64 ) -> Int
 }
 
 //converting to String
-extension Decimal64
-{
+extension Decimal64 {
     /// This function converts number to decimal and produces the string.
     /// It returns  a pointer to the beginning of the string. No leading
     /// zeros are produced, and no terminating null is produced.
@@ -1251,9 +1168,8 @@ extension Decimal64
         return buffer
     }
 
-    func toChar( _ buffer: UnsafeMutablePointer<UInt8> ) -> UnsafeMutablePointer<UInt8>
-    {
-        var man = mantissa
+    func toChar( _ buffer: UnsafeMutablePointer<UInt8> ) -> UnsafeMutablePointer<UInt8> {
+        var man = significand
 
         if man == 0 {
             return strcpy( buffer, "0" )
@@ -1395,5 +1311,4 @@ extension Decimal64
     }
 
     static let int64LookUp = LookUpTable()
-
 }
