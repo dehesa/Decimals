@@ -91,21 +91,22 @@ public struct Decimal64 {
 // MARK: - Protocol Conformance
 
 extension Decimal64: Equatable {
-    public static func == (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+    @inlinable public static func == (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
         if lhs._data == rhs._data { return true }
         
-        var sl = lhs.significand, sr = rhs.significand
-        if sl == 0 && sr == 0 { return true }
+        var (leftSignificand, rightSifnificand) = (lhs.significand, rhs.significand)
+        if leftSignificand == 0 && rightSifnificand == 0 { return true }
         
-        let expDiff = lhs.exponent - rhs.exponent
-        if expDiff < 0 {
-            // rhs has bigger exponent, i.e. smaller significand if it is equal.
-            let shift = int64_shiftLeftTo17orLim(&sr, -expDiff)
-            if (shift == -expDiff) && (sr == sl) { return true }
-        } else if expDiff > 0 {
-            // lhs has bigger exponent.
-            let shift = int64_shiftLeftTo17orLim(&sl, expDiff)
-            if (shift == expDiff) && (sl == sr) { return true }
+        let diff = lhs.exponent - rhs.exponent
+        if diff > 0 {
+            // lhs has a bigger exponent.
+            let shift = leftSignificand.shiftLeftTo17(limit: diff)
+            if (shift == diff) && (leftSignificand == rightSifnificand) { return true }
+        } else if diff < 0 {
+            // rhs has a bigger exponent, i.e. smaller significand if it is equal.
+            let limit = -diff
+            let shift = rightSifnificand.shiftLeftTo17(limit: limit)
+            if (shift == limit) && (rightSifnificand == leftSignificand) { return true }
         }
         
         // If the exponents are equal, lhs._data == rhs.data should have been equal to zero.
@@ -211,12 +212,12 @@ extension Decimal64: Numeric {
         } else {
             // Calculate new coefficient
             var myHigh = left.significand
-            let myLow  = myHigh % TenPow8
-            myHigh /= TenPow8
+            let myLow  = myHigh % Int64.powerOf10.8
+            myHigh /= Int64.powerOf10.8
             
             var otherHigh = right.significand
-            let otherLow  = otherHigh % TenPow8
-            otherHigh /= TenPow8
+            let otherLow  = otherHigh % Int64.powerOf10.8
+            otherHigh /= Int64.powerOf10.8
             
             var newHigh = myHigh * otherHigh
             var newMid  = myHigh * otherLow + myLow * otherHigh
@@ -226,21 +227,21 @@ extension Decimal64: Numeric {
             
             if (newHigh > 0) {
                 // Make high as big as possible.
-                shift = 16 - int64_shiftLeftTo17_16( &newHigh )
+                shift = 16 - newHigh.shiftLeftTo17Limit16()
                 
                 if (shift > 8) {
-                    newMid /= PowerOf10[ shift - 8 ]
-                    myMan /= PowerOf10[ shift ]
+                    newMid /= Int64.tenToThePower(of: shift - 8)
+                    myMan /= Int64.tenToThePower(of: shift)
                 } else {
-                    newMid *= PowerOf10[ 8 - shift ]
-                    myMan /= PowerOf10[ shift ]
+                    newMid *= Int64.tenToThePower(of: 8 - shift)
+                    myMan /= Int64.tenToThePower(of: shift)
                 }
                 
                 myMan += newHigh + newMid
             } else if ( newMid > 0 ) {
                 // Make mid as big as possible.
-                shift = 8 - int64_shiftLeftTo17_8( &newMid )
-                myMan /= PowerOf10[ shift ]
+                shift = 8 - newMid.shiftLeftTo17Limit8()
+                myMan /= Int64.tenToThePower(of: shift)
                 myMan += newMid
             }
             
@@ -256,6 +257,13 @@ extension Decimal64: ExpressibleByIntegerLiteral {
     @_transparent public init(integerLiteral value: Int64) {
         precondition(Swift.abs(value) < 10_000_000_000_000_000)
         self.init(storage: value << Self.exponentBitCount)
+    }
+}
+
+extension Decimal64: ExpressibleByFloatLiteral {
+    // If used as an literal, we assume we can force unwrap it
+    @_transparent public init(floatLiteral value: Double) {
+        self.init(value)!
     }
 }
 
@@ -355,18 +363,18 @@ extension Decimal64 {
             var half: Int64 = 5
             if method != .towardZero {
                 if expScale >= -16  {
-                    remainder = man % PowerOf10[ -( expScale ) ];
+                    remainder = man % Int64.tenToThePower(of: -expScale)
                 }
                 else if man != 0 {
                     remainder = 1
                 }
                 if ( method != .awayFromZero ) && ( expScale >= -18 ) {
-                    half *= PowerOf10[ -( expScale ) - 1 ]
+                    half *= Int64.tenToThePower(of: -expScale - 1)
                 }
             }
 
             // first round down
-            shiftDigits( &man, expScale );
+            man.shift(decimalDigits: expScale)
 
             switch method {
             case .toNearestOrAwayFromZero:
@@ -437,13 +445,13 @@ extension Decimal64 {
         else
         {
             // Round the internal coefficient to a maximum of 16 digits.
-            if man >= TenPow16  {
-                if man < TenPow17  {
+            if man >= Int64.powerOf10.16  {
+                if man < Int64.powerOf10.17  {
                     man += 5
                     man /= 10
                     exp += 1
                 }
-                else if man < TenPow18 {
+                else if man < Int64.powerOf10.18 {
                     man += 50
                     man /= 100
                     exp += 2
@@ -460,11 +468,11 @@ extension Decimal64 {
 
             // try denormalization if possible
             if exp > 253 {
-                exp -= int64_shiftLeftTo16( &_data ) //TODO: numbers with exponent > 253 may be denormalized to much
+                exp -= self._data.shiftLeftTo16() //TODO: numbers with exponent > 253 may be denormalized to much
                 _data |= Int64( exp )
             }
             else if  exp < -256 {
-                shiftDigits( &_data, exp + 256 )
+                self._data.shift(decimalDigits: exp + 256)
 
                 if _data != 0 {
                     _data |= -256
@@ -529,7 +537,7 @@ extension Decimal64 {
             // -32 <= myExp - otherExp <= 32
             if ( myExp < otherExp ) {
                 // Make otherExp smaller.
-                otherExp -= int64_shiftLeftTo17orLim( &otherMan, min( 17, otherExp - myExp ) )
+                otherExp -= otherMan.shiftLeftTo17(limit: min( 17, otherExp - myExp ) )
                 if ( myExp != otherExp ) {
                     if ( otherExp > myExp + 16 ) {
                         // This is too small, therefore sum is completely sign * |NumB|.
@@ -541,12 +549,12 @@ extension Decimal64 {
                     }
 
                     // myExp is still smaller than otherExp, make it bigger.
-                    myMan /= PowerOf10[ otherExp - myExp ]
+                    myMan /= Int64.tenToThePower(of: otherExp - myExp)
                     myExp = otherExp
                 }
             } else {
                 // Make myExp smaller.
-                myExp -= int64_shiftLeftTo17orLim( &myMan, min( 17, myExp - otherExp ) )
+                myExp -= myMan.shiftLeftTo17(limit: min( 17, myExp - otherExp ) )
                 if ( myExp != otherExp ) {
                     if ( myExp > otherExp + 16 ) {
                         // Nothing to do because NumB is too small
@@ -554,7 +562,7 @@ extension Decimal64 {
                     }
 
                     // otherExp is still smaller than myExp, make it bigger.
-                    otherMan /= PowerOf10[ myExp - otherExp ]
+                    otherMan /= Int64.tenToThePower(of: myExp - otherExp)
                 }
             }
 
@@ -595,7 +603,7 @@ extension Decimal64 {
             // -32 <= myExp - otherExp <= 32
             if ( myExp < otherExp ) {
                 // Make otherExp smaller.
-                otherExp -= int64_shiftLeftTo17orLim( &otherMan, min( 17, otherExp - myExp ) );
+                otherExp -= otherMan.shiftLeftTo17(limit: min( 17, otherExp - myExp ) );
                 if ( myExp != otherExp ) {
                     if ( otherExp > myExp + 16 ) {
                         // This is too small, therefore difference is completely -sign * |NumB|.
@@ -607,12 +615,12 @@ extension Decimal64 {
                     }
 
                     // myExp is still smaller than otherExp, make it bigger.
-                    myMan /= PowerOf10[ otherExp - myExp ];
+                    myMan /= Int64.tenToThePower(of: otherExp - myExp)
                     myExp = otherExp;
                 }
             } else {
                 // Make myExp smaller.
-                myExp -= int64_shiftLeftTo17orLim( &myMan, min( 17, myExp - otherExp ) );
+                myExp -= myMan.shiftLeftTo17(limit: min( 17, myExp - otherExp ) );
                 if ( myExp != otherExp ) {
                     if ( myExp > otherExp + 16 ) {
                         // Nothing to do because NumB is too small
@@ -620,7 +628,7 @@ extension Decimal64 {
                     }
 
                     // otherExp is still smaller than myExp, make it bigger.
-                    otherMan /= PowerOf10[ myExp - otherExp ];
+                    otherMan /= Int64.tenToThePower(of: myExp - otherExp)
                 }
             }
 
@@ -685,19 +693,19 @@ extension Decimal64 {
 
             // First approach of result.
             // Make numerator as big as possible.
-            var mainShift = int64_shiftLeftTo18( &myMan )
+            var mainShift = myMan.shiftLeftTo18()
 
             // Do division.
             var remainderA = myMan % otherMan
             myMan /= otherMan
 
             // Make result as big as possible.
-            var shift = int64_shiftLeftTo18( &myMan )
+            var shift = myMan.shiftLeftTo18()
             mainShift += shift
 
             while ( remainderA > 0 )
             {
-                shift -= int64_shiftLeftTo18( &remainderA )
+                shift -= remainderA.shiftLeftTo18()
                 if ( shift < -17 )
                 {
                     break;
@@ -707,7 +715,7 @@ extension Decimal64 {
                 let remainderB = remainderA % otherMan
                 remainderA /= otherMan
 
-                shiftDigits( &remainderA, shift )
+                remainderA.shift(decimalDigits: shift)
 
                 if ( remainderA == 0 )
                 {
@@ -750,10 +758,10 @@ extension Decimal64 {
             var shift = 0
 
             if exp < 0 {
-                man /= PowerOf10[ -exp ]
+                man /= Int64.tenToThePower(of: -exp)
                 exp = 0
             } else  if ( ( exp > 0 ) && ( exp <= 17 ) ) {
-                shift = int64_shiftLeftTo17orLim( &man, exp )
+                shift = man.shiftLeftTo17(limit: exp)
             }
 
             if ( ( man > limit ) || ( shift != exp ) ) {
@@ -793,10 +801,9 @@ extension Decimal64: CustomStringConvertible {
         //      var ca: [UInt8] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
         //      return String(cString: toChar(&ca[0]))
         var data: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-            UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-            UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-            UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
-            ) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+                   UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                   UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                   UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
         return String(cString: toChar(&data.0))
     }
 }
@@ -804,12 +811,10 @@ extension Decimal64: CustomStringConvertible {
 extension Decimal64: TextOutputStreamable {
     public func write<Target>(to target: inout Target) where Target : TextOutputStream {
         var data: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-            UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-            UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-            UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
-            ) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-
-        var man = significand
+                   UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                   UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                   UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+        var man = self.significand
 
         if man == 0 {
             target.write("0")
@@ -924,13 +929,6 @@ extension Decimal64: TextOutputStreamable {
 
         end.pointee = 0
         target._writeASCII(UnsafeBufferPointer<UInt8>(start: start, count: end - start))
-    }
-}
-
-extension Decimal64: ExpressibleByFloatLiteral {
-    // If used as an literal, we assume we can force unwrap it
-    public init(floatLiteral value: Double) {
-        self.init( value )!
     }
 }
 
@@ -1068,41 +1066,40 @@ func toMaximumDigits( _ num: inout Int64 ) -> Int {
         return 0
     }
     var n = abs(num)
-    var ret = 0
+    var result = 0
     // num will overflow if pushed left, just shift to 16 digits
 
-    if n < TenPow8 {
-        if n < TenPow4 {
-            ret = 12
-            n &*= TenPow12
-        }
-        else {
-            ret = 8
-            n &*= TenPow8
+    if n < Int64.powerOf10.8 {
+        if n < Int64.powerOf10.4 {
+            result = 12
+            n &*= Int64.powerOf10.12
+        } else {
+            result = 8
+            n &*= Int64.powerOf10.8
         }
     }
     else {
-        if n < TenPow12 {
-            ret = 4
-            n &*= TenPow4
+        if n < Int64.powerOf10.12 {
+            result = 4
+            n &*= Int64.powerOf10.4
         }
     }
 
-    if n < TenPow14 {
-        if n < TenPow13 {
-            ret &+= 3
+    if n < Int64.powerOf10.14 {
+        if n < Int64.powerOf10.13 {
+            result &+= 3
             n &*= 1000
         } else {
-            ret &+= 2
+            result &+= 2
             n &*= 100
         }
-    } else if n < TenPow15 {
-        ret &+= 1
+    } else if n < Int64.powerOf10.15 {
+        result &+= 1
         n &*= 10
     }
 
     num = (num < 0) ? -n: n
-    return ret
+    return result
 }
 
 //converting to String
@@ -1118,8 +1115,7 @@ extension Decimal64 {
     ///   - x: The number.
     ///   - end: Pointer to the end of the buffer.
     /// - Returns: Pointer to beginning of the string.
-    private func ll2str(_ x: Int64, _ end: UnsafeMutableRawPointer ) -> UnsafeMutablePointer<UInt8>
-    {
+    private func ll2str(_ x: Int64, _ end: UnsafeMutableRawPointer ) -> UnsafeMutablePointer<UInt8> {
         var x = x
         var end = end
 

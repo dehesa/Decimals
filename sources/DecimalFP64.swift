@@ -1016,18 +1016,18 @@ public struct DecimalFP64: FloatingPoint {
             var half: Int64 = 5
             if method != .towardZero {
                 if expScale >= -16  {
-                    remainder = man % PowerOf10[ -( expScale ) ];
+                    remainder = man % Int64.tenToThePower(of: -expScale)
                 }
                 else if man != 0 {
                     remainder = 1
                 }
                 if ( method != .awayFromZero ) && ( expScale >= -18 ) {
-                    half *= PowerOf10[ -( expScale ) - 1 ]
+                    half *= Int64.tenToThePower(of: -expScale - 1)
                 }
             }
 
             // first round down
-            shiftDigits( &man, expScale );
+            man.shift(decimalDigits: expScale)
 
             switch method {
             case .toNearestOrAwayFromZero:
@@ -1486,13 +1486,13 @@ public struct DecimalFP64: FloatingPoint {
         else
         {
             // Round the internal coefficient to a maximum of 16 digits.
-            if mantissa >= TenPow16  {
-                if mantissa < TenPow17  {
+            if mantissa >= Int64.powerOf10.16  {
+                if mantissa < Int64.powerOf10.17  {
                     mantissa += 5
                     mantissa /= 10
                     exponent += 1
                 }
-                else if mantissa < TenPow18 {
+                else if mantissa < Int64.powerOf10.18 {
                     mantissa += 50
                     mantissa /= 100
                     exponent += 2
@@ -1509,7 +1509,7 @@ public struct DecimalFP64: FloatingPoint {
 
             // try denormalization if possible
             if exponent > 253 {
-                exponent -= int64_shiftLeftTo16( &Data ) //TODO: numbers with exponent > 253 may be denormalized to much
+                exponent -= Data.shiftLeftTo16() //TODO: numbers with exponent > 253 may be denormalized to much
 
                 if exponent > 253 {
                     setInfinity()
@@ -1519,7 +1519,7 @@ public struct DecimalFP64: FloatingPoint {
                 }
             }
             else if  exponent < -256 {
-                shiftDigits( &Data, exponent + 256 )
+                Data.shift(decimalDigits: exponent + 256)
 
                 if Data != 0 {
                     Data |= -256 << DecimalFP64.EXP_SHIFT
@@ -1596,7 +1596,7 @@ public struct DecimalFP64: FloatingPoint {
             else if ( ( leftExp > rightExp - 18 ) && ( leftExp < rightExp ) )
             {
                 // Try to make rightExp smaller to make it equal to leftExp.
-                rightExp -= int64_shiftLeftTo17orLim( &rightMan, rightExp - leftExp );
+                rightExp -= rightMan.shiftLeftTo17(limit: rightExp - leftExp)
 
                 if ( leftExp == rightExp )
                 {
@@ -1606,7 +1606,7 @@ public struct DecimalFP64: FloatingPoint {
             else if ( ( leftExp < rightExp + 18 ) && ( leftExp > rightExp ) )
             {
                 // Try to make leftExp smaller to make it equal to rightExp.
-                leftExp -= int64_shiftLeftTo17orLim( &leftMan, leftExp - rightExp );
+                leftExp -= leftMan.shiftLeftTo17(limit: leftExp - rightExp )
 
                 if ( leftExp == rightExp )
                 {
@@ -1674,17 +1674,17 @@ public struct DecimalFP64: FloatingPoint {
                 if ( leftExp < rightExp )
                 {
                     // Try to make rightExp smaller to make it equal to leftExp.
-                    rightExp -= int64_shiftLeftTo17orLim( &rightMan, rightExp - leftExp );
+                    rightExp -= rightMan.shiftLeftTo17(limit: rightExp - leftExp)
 
-                    // If rightExp is greater than leftExp then rightMan > TenPow16 > leftMan.
+                    // If rightExp is greater than leftExp then rightMan > Int64.powerOf10.16 > leftMan.
                     ret = true;
                 }
                 else
                 {
                     // Try to make leftExp smaller to make it equal to rightExp.
-                    leftExp -= int64_shiftLeftTo17orLim( &leftMan, leftExp - rightExp );
+                    leftExp -= leftMan.shiftLeftTo17(limit: leftExp - rightExp)
 
-                    // If leftExp is greater than rightExp then leftMan > TenPow16 > rightMan.
+                    // If leftExp is greater than rightExp then leftMan > Int64.powerOf10.16 > rightMan.
                 }
 
                 if ( leftExp == rightExp )
@@ -1753,7 +1753,7 @@ public struct DecimalFP64: FloatingPoint {
                 // -32 <= myExp - otherExp <= 32
                 if ( myExp < otherExp ) {
                     // Make otherExp smaller.
-                    otherExp -= int64_shiftLeftTo17orLim( &otherMan, min( 17, otherExp - myExp ) )
+                    otherExp -= otherMan.shiftLeftTo17(limit: min( 17, otherExp - myExp ))
                     if ( myExp != otherExp ) {
                         if ( otherExp > myExp + 16 ) {
                             // This is too small, therefore sum is completely sign * |NumB|.
@@ -1763,13 +1763,13 @@ public struct DecimalFP64: FloatingPoint {
                         }
 
                         // myExp is still smaller than otherExp, make it bigger.
-                        myMan /= PowerOf10[ otherExp - myExp ]
+                        myMan /= Int64.tenToThePower(of: otherExp - myExp)
                         myExp = otherExp
                     }
                 }
                 else {
                     // Make myExp smaller.
-                    myExp -= int64_shiftLeftTo17orLim( &myMan, min( 17, myExp - otherExp ) )
+                    myExp -= myMan.shiftLeftTo17(limit: min( 17, myExp - otherExp ))
                     if ( myExp != otherExp ) {
                         if ( myExp > otherExp + 16 ) {
                             // Nothing to do because NumB is too small
@@ -1777,7 +1777,7 @@ public struct DecimalFP64: FloatingPoint {
                         }
 
                         // otherExp is still smaller than myExp, make it bigger.
-                        otherMan /= PowerOf10[ myExp - otherExp ]
+                        otherMan /= Int64.tenToThePower(of: myExp - otherExp)
                     }
                 }
 
@@ -1847,7 +1847,7 @@ public struct DecimalFP64: FloatingPoint {
                 if ( myExp < otherExp )
                 {
                     // Make otherExp smaller.
-                    otherExp -= int64_shiftLeftTo17orLim( &otherMan, min( 17, otherExp - myExp ) );
+                    otherExp -= otherMan.shiftLeftTo17(limit: min( 17, otherExp - myExp ))
                     if ( myExp != otherExp )
                     {
                         if ( otherExp > myExp + 16 )
@@ -1859,14 +1859,14 @@ public struct DecimalFP64: FloatingPoint {
                         }
 
                         // myExp is still smaller than otherExp, make it bigger.
-                        myMan /= PowerOf10[ otherExp - myExp ];
+                        myMan /= Int64.tenToThePower(of: otherExp - myExp)
                         myExp = otherExp;
                     }
                 }
                 else
                 {
                     // Make myExp smaller.
-                    myExp -= int64_shiftLeftTo17orLim( &myMan, min( 17, myExp - otherExp ) );
+                    myExp -= myMan.shiftLeftTo17(limit: min( 17, myExp - otherExp ))
                     if ( myExp != otherExp )
                     {
                         if ( myExp > otherExp + 16 )
@@ -1876,7 +1876,7 @@ public struct DecimalFP64: FloatingPoint {
                         }
 
                         // otherExp is still smaller than myExp, make it bigger.
-                        otherMan /= PowerOf10[ myExp - otherExp ];
+                        otherMan /= Int64.tenToThePower(of: myExp - otherExp)
                     }
                 }
 
@@ -2022,12 +2022,12 @@ public struct DecimalFP64: FloatingPoint {
         {
             // Calculate new coefficient
             var myHigh = left.getMantissa()
-            let myLow  = myHigh % TenPow8
-            myHigh /= TenPow8
+            let myLow  = myHigh % Int64.powerOf10.8
+            myHigh /= Int64.powerOf10.8
 
             var otherHigh = right.getMantissa()
-            let otherLow  = otherHigh % TenPow8
-            otherHigh /= TenPow8
+            let otherLow  = otherHigh % Int64.powerOf10.8
+            otherHigh /= Int64.powerOf10.8
 
             var newHigh = myHigh * otherHigh
             var newMid  = myHigh * otherLow + myLow * otherHigh
@@ -2038,17 +2038,17 @@ public struct DecimalFP64: FloatingPoint {
             if ( newHigh > 0 )
             {
                 // Make high as big as possible.
-                shift = 16 - int64_shiftLeftTo17_16( &newHigh )
+                shift = 16 - newHigh.shiftLeftTo17Limit16()
 
                 if ( shift > 8 )
                 {
-                    newMid /= PowerOf10[ shift - 8 ]
-                    myMan /= PowerOf10[ shift ]
+                    newMid /= Int64.tenToThePower(of: shift - 8)
+                    myMan /= Int64.tenToThePower(of: shift)
                 }
                 else
                 {
-                    newMid *= PowerOf10[ 8 - shift ]
-                    myMan /= PowerOf10[ shift ]
+                    newMid *= Int64.tenToThePower(of: 8 - shift)
+                    myMan /= Int64.tenToThePower(of: shift)
                 }
 
                 myMan += newHigh + newMid
@@ -2056,8 +2056,8 @@ public struct DecimalFP64: FloatingPoint {
             else if ( newMid > 0 )
             {
                 // Make mid as big as possible.
-                shift = 8 - int64_shiftLeftTo17_8( &newMid )
-                myMan /= PowerOf10[ shift ]
+                shift = 8 - newMid.shiftLeftTo17Limit8()
+                myMan /= Int64.tenToThePower(of: shift)
                 myMan += newMid
             }
 
@@ -2091,67 +2091,51 @@ public struct DecimalFP64: FloatingPoint {
 
         if ( ( myExp > 253 ) || ( rightExp > 253 ) ) // equivalent to ( !isNumber() || !right.isNumber() ) but faster
         {
-            if ( ( myExp == 254 ) && ( rightExp <= 254 ) )
-            {
+            if ( ( myExp == 254 ) && ( rightExp <= 254 ) ) {
                 let flipSign = (left.getSign() != right.getSign());
                 left.setInfinity()
 
                 if ( flipSign ){
                     left.minus();
                 }
-            }
-            else if ( ( myExp <= 253 ) && ( rightExp == 254 ) )
-            {
+            } else if ( ( myExp <= 253 ) && ( rightExp == 254 ) ) {
                 left.Data = 0
-            }
-            else
-            {
+            } else {
                 left.setNaN();
             }
-        }
-        else if ( otherMan == 0 )
-        {
+        } else if ( otherMan == 0 ) {
             let sign = left.getSign();
             left.setInfinity()
 
             if sign {
                 left.minus()
             }
-        }
-        else if ( myMan != 0 ) && ( right.Data != 1 )
-        {
+        } else if ( myMan != 0 ) && ( right.Data != 1 ) {
             // Calculate new coefficient
 
             // First approach of result.
             // Make numerator as big as possible.
-            var mainShift = int64_shiftLeftTo18( &myMan )
+            var mainShift = myMan.shiftLeftTo18()
 
             // Do division.
             var remainderA = myMan % otherMan
             myMan /= otherMan
 
             // Make result as big as possible.
-            var shift = int64_shiftLeftTo18( &myMan )
+            var shift = myMan.shiftLeftTo18()
             mainShift += shift
 
-            while ( remainderA > 0 )
-            {
-                shift -= int64_shiftLeftTo18( &remainderA )
-                if ( shift < -17 )
-                {
-                    break;
-                }
+            while ( remainderA > 0 ) {
+                shift -= remainderA.shiftLeftTo18()
+                if (shift < -17) { break }
 
                 // Do division.
                 let remainderB = remainderA % otherMan
                 remainderA /= otherMan
 
-                shiftDigits( &remainderA, shift )
+                remainderA.shift(decimalDigits: shift)
 
-                if ( remainderA == 0 )
-                {
-                    break
-                }
+                if (remainderA == 0) { break }
 
                 myMan += remainderA
 
@@ -2240,11 +2224,11 @@ public struct DecimalFP64: FloatingPoint {
             var shift = 0
 
             if exp < 0 {
-                man /= PowerOf10[ -exp ]
+                man /= Int64.tenToThePower(of: -exp)
                 exp = 0
             }
             else  if ( ( exp > 0 ) && ( exp <= 17 ) ) {
-                shift = int64_shiftLeftTo17orLim( &man, exp )
+                shift = man.shiftLeftTo17(limit: exp)
             }
 
             if ( ( man > limit ) || ( shift != exp ) ) {
