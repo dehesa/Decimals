@@ -36,7 +36,7 @@ extension Decimal64 {
 
 /// Custom implementation for a decimal type.
 ///
-/// It uses 55 bit for the significand and 9 bit for exponent; both will be stored as twos complement in case of negative numbers.
+/// It uses 55 bits for the significand and 9 bits for exponent; both will be stored as twos complement in case of negative numbers.
 /// The significand doesn't have to be normalized (although it is better if it is).
 ///
 ///     63                                          9 8            0
@@ -70,8 +70,8 @@ public struct Decimal64 {
     /// - returns: A decimal number or `nil` if the given `exponent` and significand represent a number with more than 16 decimal digits.
     @usableFromInline internal init?(exponent: Exponent, significand: Significand) {
         guard Swift.abs(significand) < 10_000_000_000_000_000, (exponent >= Self.leastExponent) && (exponent <= Self.greatestExponent) else { return nil }
-        let newExp = (significand < 0) ? -exponent: exponent
-        self.init(storage: (significand << Self.exponentBitCount) | (InternalStorage(newExp) & Self.exponentMask))
+        let exp = (significand < 0) ? -exponent: exponent
+        self.init(storage: (significand << Self.exponentBitCount) | (InternalStorage(exp) & Self.exponentMask))
     }
     
     /// The significand of the floating-point value.
@@ -88,10 +88,10 @@ public struct Decimal64 {
     }
 }
 
-// MARK: - Protocol Conformance
+// MARK: - Protocols Conformance
 
 extension Decimal64: Equatable {
-    @inlinable public static func == (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+    @inlinable public static func == (_ lhs: Self, _ rhs: Self) -> Bool {
         if lhs._data == rhs._data { return true }
         
         var (leftSignificand, rightSifnificand) = (lhs.significand, rhs.significand)
@@ -112,14 +112,16 @@ extension Decimal64: Equatable {
         // If the exponents are equal, lhs._data == rhs.data should have been equal to zero.
         return false
     }
-    
-    @_transparent public static func != (_ lsh: Decimal64, _ rhs: Decimal64) -> Bool {
-        !(lsh == rhs)
+}
+
+extension Decimal64: Hashable {
+    @_transparent public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.normalized())
     }
 }
 
 extension Decimal64: Comparable {
-    public static func < (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+    public static func < (_ lhs: Self, _ rhs: Self) -> Bool {
         if lhs._data == rhs._data { return false }
         
         let ln = lhs.normalized(), rn = rhs.normalized()
@@ -134,37 +136,37 @@ extension Decimal64: Comparable {
         }
     }
     
-    @_transparent public static func > (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool {
+    @_transparent public static func > (_ lhs: Self, _ rhs: Self) -> Bool {
         rhs < lhs
     }
     
-    @_transparent public static func >= (_ lhs: Decimal64, _ rhs: Decimal64) -> Bool{
+    @_transparent public static func >= (_ lhs: Self, _ rhs: Self) -> Bool{
         !(lhs < rhs)
     }
     
-    @_transparent public static func <= (_ left: Decimal64, _ right: Decimal64) -> Bool {
+    @_transparent public static func <= (_ left: Self, _ right: Self) -> Bool {
         !(right < left)
     }
 }
 
 extension Decimal64: AdditiveArithmetic {
-    public static var zero: Decimal64 {
+    @_transparent public static var zero: Self {
         .init(storage: 0)
     }
     
-    @_transparent public static func + (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+    @_transparent public static func + (_ lhs: Self, _ rhs: Self) -> Self {
         var result = lhs
         result += rhs
         return result
     }
     
-    @_transparent public static func - (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+    @_transparent public static func - (_ lhs: Self, _ rhs: Self) -> Self {
         var result = lhs
         result -= rhs
         return result
     }
     
-    public static func += (_ lhs: inout Decimal64, _ rhs: Decimal64) {
+    public static func += (_ lhs: inout Self, _ rhs: Self) {
         let sign = lhs.sign
         
         if sign == rhs.sign {
@@ -174,7 +176,7 @@ extension Decimal64: AdditiveArithmetic {
         }
     }
     
-    public static func -=(_ lsh: inout Decimal64, _ rhs: Decimal64) {
+    public static func -=(_ lsh: inout Self, _ rhs: Self) {
         let sign = lsh.sign
         
         if sign == rhs.sign {
@@ -191,19 +193,19 @@ extension Decimal64: Numeric {
         self.init(storage: Int64(truncatingIfNeeded: source) << Self.exponentBitCount)
     }
     
-    public var magnitude: Decimal64 {
+    public var magnitude: Self {
         var result = self
         result.abs()
         return result
     }
     
-    @_transparent public static func * (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+    @_transparent public static func * (_ lhs: Self, _ rhs: Self) -> Self {
         var result = lhs
         result *= rhs
         return result
     }
     
-    public static func *= (_ left: inout Decimal64, _ right: Decimal64) {
+    public static func *= (_ left: inout Self, _ right: Self) {
         var myExp = left.exponent
         let rightExp = right.exponent
         
@@ -253,6 +255,26 @@ extension Decimal64: Numeric {
     }
 }
 
+extension Decimal64: SignedNumeric {
+    public mutating func negate() {
+        self._data = -self._data
+    }
+    
+    public prefix static func - (operand: Self) -> Self {
+        .init(storage: -operand._data)
+    }
+}
+
+extension Decimal64: Strideable {
+    @_transparent public func advanced(by n: Self) -> Self {
+        self + n
+    }
+    
+    @_transparent public func distance(to other: Self) -> Self {
+        other - self
+    }
+}
+
 extension Decimal64: ExpressibleByIntegerLiteral {
     @_transparent public init(integerLiteral value: Int64) {
         precondition(Swift.abs(value) < 10_000_000_000_000_000)
@@ -263,7 +285,22 @@ extension Decimal64: ExpressibleByIntegerLiteral {
 extension Decimal64: ExpressibleByFloatLiteral {
     // If used as an literal, we assume we can force unwrap it
     @_transparent public init(floatLiteral value: Double) {
+        // TODO: Find out a way to pass the literal to decimal number.
         self.init(value)!
+    }
+}
+
+extension Decimal64 /*: FloatingPoint*/ {
+    @inlinable public static var pi: Self {
+        let significand: Significand = 3141592653589793
+        let exponent: InternalStorage = -15
+        return .init(storage: (significand << Self.exponentBitCount) | (exponent & Self.exponentMask))
+    }
+    
+    @inlinable public static var tau: Self {
+        let significand: Significand = 6283185307179586
+        let exponent: InternalStorage = -15
+        return .init(storage: (significand << Self.exponentBitCount) | (exponent & Self.exponentMask))
     }
 }
 
@@ -298,10 +335,6 @@ extension Decimal64 {
         }
     }
 
-    mutating func minus() {
-        self._data = -self._data
-    }
-
     public func adding(_ other: Decimal64) -> Decimal64 {
         var left = self
         left += other
@@ -310,12 +343,6 @@ extension Decimal64 {
 
     public mutating func add(_ other: Decimal64) {
         self += other
-    }
-
-    public func negated() -> Decimal64 {
-        var left = self
-        left.minus()
-        return left
     }
 
     public func subtracting(_ other: Decimal64) -> Decimal64 {
@@ -734,8 +761,6 @@ extension Decimal64 {
         }
     }
 
-    public static prefix func -( _ op: Decimal64 ) -> Decimal64 { var ret = op; ret.minus(); return ret }
-
     /// If eventually a high-performance swift is available...
     /// a non-throwing swap may be necessary
     ///
@@ -956,7 +981,7 @@ extension Decimal64: ExpressibleByStringLiteral {
             c = iter.next()
         }
 
-        print(c ?? "END")
+//        print(c ?? "END")
 
         // Check sign
         let sig = ( c == "-" )
@@ -1046,7 +1071,7 @@ extension Decimal64: ExpressibleByStringLiteral {
                 return nil
             }
         }
-        print (c ?? "END")
+//        print (c ?? "END")
         self.init(exponent: exp, significand: man)
     }
 }

@@ -1,16 +1,42 @@
+import Decimals
 import XCTest
 
 final class Decimal64Test: XCTestCase {
-    var s = ""
-
     override func setUp() {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+        self.continueAfterFailure = false
     }
+}
 
-    override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+extension Decimal64Test {
+    func testPi() {
+        let hardcoded = Decimal64("3.141592653589793")
+        let generated = Decimal64.pi
+        XCTAssertEqual(hardcoded, generated)
     }
+}
 
+extension BinaryInteger {
+    fileprivate var binaryDescription: String {
+        var binaryString = ""
+        var internalNumber = self
+        var counter = 0
+        
+        for _ in (1...self.bitWidth) {
+            binaryString.insert(contentsOf: "\(internalNumber & 1)", at: binaryString.startIndex)
+            internalNumber >>= 1
+            counter += 1
+            if counter % 4 == 0 {
+                binaryString.insert(contentsOf: " ", at: binaryString.startIndex)
+            }
+        }
+        
+        return binaryString
+    }
+}
+
+//extension Decimal64Test {
+//    var s = ""
+//
 //    func testtoMaxDigits() {
 //        // This is an example of a functional test case.
 //        // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -22,7 +48,7 @@ final class Decimal64Test: XCTestCase {
 //            a *= 10
 //        }
 //    }
-
+//
 //    func testCompareLess() {
 //        // This is an example of a functional test case.
 //        // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -33,7 +59,7 @@ final class Decimal64Test: XCTestCase {
 //        let d = Decimal64( 123, withExponent: 10 )!
 //        XCTAssert(c < d)
 //    }
-
+//
 //    func testCompareEqual() {
 //        // This is an example of a functional test case.
 //        // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -41,7 +67,7 @@ final class Decimal64Test: XCTestCase {
 //        let b = Decimal64(100, withExponent: -2 )!
 //        XCTAssert(a == b)
 //    }
-
+//
 //    func testPerformanceDouble() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -51,7 +77,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-    
+//
 //    func testPerformanceDecimal() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -61,7 +87,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-    
+//
 //    func testPerformanceDecimalFP64() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -71,7 +97,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-
+//
 //    func testPerformanceDecimal64() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -81,7 +107,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-
+//
 //    func testPerformanceDecimalFP64Template() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -91,7 +117,7 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-    
+//
 //    func testPerformanceDoubleTemplate() {
 //        // This is an example of a performance test case.
 //        self.measure {
@@ -101,4 +127,4 @@ final class Decimal64Test: XCTestCase {
 //            }
 //        }
 //    }
-}
+//}

@@ -1,6 +1,7 @@
 internal extension Int64 {
     /// Cache for the first 18 values of 10 to the power of n (for performance purposes).
-    static let powerOf10 = (    1 as Int64, // 0
+    static let powerOf10 = (
+                                1 as Int64, // 0
                                10 as Int64, // 1
                               100 as Int64, // 2
                             1_000 as Int64, // 3
