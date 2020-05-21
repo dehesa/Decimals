@@ -1,6 +1,8 @@
+import Foundation
+
 internal extension Int64 {
     /// Cache for the first 18 values of 10 to the power of n (for performance purposes).
-    @usableFromInline static let powerOf10 = (
+    static let powerOf10 = (
                                 1 as Int64, // 0
                                10 as Int64, // 1
                               100 as Int64, // 2
@@ -23,7 +25,7 @@ internal extension Int64 {
     )
 
     /// Returns the result of `10^exponent`.
-    @usableFromInline @_transparent static func tenToThePower(of exponent: Int) -> Int64 {
+    @_transparent static func tenToThePower(of exponent: Int) -> Int64 {
         withUnsafeBytes(of: Self.powerOf10) {
             $0.baseAddress!.assumingMemoryBound(to: Int64.self)[exponent]
         }
@@ -34,7 +36,7 @@ internal extension Int64 {
     /// Calculates `num * 10^shift`.
     /// - attention: The receiving integer, must not have more than 18 decimal digits.
     /// - parameter shift: Number of decimal digits to shift, must not be larger than +16.
-    @usableFromInline mutating func shift(decimalDigits shift: Int) {
+    @_transparent mutating func shift(decimalDigits shift: Int) {
         if shift < -17 {
             self = 0
         } else if shift < 0 {
@@ -47,7 +49,7 @@ internal extension Int64 {
     /// Shifts the receiving number to the left until it fills 16 decimal digits.
     /// - attention: The receiving integer must not have more than 18 decimal digits.
     /// - returns: The number of shifted digits.
-    @usableFromInline mutating func shiftLeftTo16() -> Int {
+    @_transparent mutating func shiftLeftTo16() -> Int {
         var result = 0
         
         if self < Int64.powerOf10.8 {
@@ -85,7 +87,7 @@ internal extension Int64 {
     /// - attention: The receiving integer must not have more than 18 decimal digits.
     /// - parameter limit: Maximum number of decimal digits to shift, must not be larger than 17.
     /// - returns: Count of shifted digits.
-    @usableFromInline mutating func shiftLeftTo17(limit: Int) -> Int {
+    mutating func shiftLeftTo17(limit: Int) -> Int {
         if self < Int64.tenToThePower(of:17 - limit) {
             // num will not overflow if pushed left
             self *= Int64.tenToThePower(of: limit)
@@ -134,7 +136,7 @@ internal extension Int64 {
     /// Same as `Int64.shiftLeftTo17(limit:)` but faster.
     /// - attention: The receiving integer must not have more than 18 digits.
     /// - returns: The number of shifted decimal digits.
-    @usableFromInline mutating func shiftLeftTo17Limit16() -> Int {
+    @_transparent mutating func shiftLeftTo17Limit16() -> Int {
         var result = 0
         
         if self < Int64.powerOf10.8 {
@@ -176,7 +178,7 @@ internal extension Int64 {
     /// Same as `Int64.shiftLeftTo17(limit:)` but faster.
     /// - attention: The receiving integer must not have more than 18 digits.
     /// - returns: The number of shifted digits.
-    @usableFromInline mutating func shiftLeftTo17Limit8() -> Int {
+    @_transparent mutating func shiftLeftTo17Limit8() -> Int {
         var result = 0
         
         if self < Int64.powerOf10.8 {
@@ -211,7 +213,7 @@ internal extension Int64 {
     /// Shifts the receiving number to the left until it fills 18 decimal digits.
     /// - attention: The number to process, must not have more than 18 decimal digits.
     /// - returns: The number of shifted digits.
-    @usableFromInline mutating func shiftLeftTo18() -> Int {
+    mutating func shiftLeftTo18() -> Int {
         var result = 0
         
         if self < Int64.powerOf10.8 {
@@ -246,5 +248,105 @@ internal extension Int64 {
         }
         
         return result
+    }
+
+    /// Internal helper function to shift a number to the left until it fills 16 digits.
+    /// - attention: The receiving number must not have more than 18 digits
+    /// - returns: Count of shifted digits
+    mutating func toMaximumDigits() -> Int {
+        if self == 0 { return 0 }
+        var n = abs(self)
+        var result = 0
+        // self will overflow if pushed left, just shift to 16 digits
+        
+        if n < Int64.powerOf10.8 {
+            if n < Int64.powerOf10.4 {
+                result = 12
+                n &*= Int64.powerOf10.12
+            } else {
+                result = 8
+                n &*= Int64.powerOf10.8
+            }
+        } else {
+            if n < Int64.powerOf10.12 {
+                result = 4
+                n &*= Int64.powerOf10.4
+            }
+        }
+        
+        if n < Int64.powerOf10.14 {
+            if n < Int64.powerOf10.13 {
+                result &+= 3
+                n &*= 1000
+            } else {
+                result &+= 2
+                n &*= 100
+            }
+        } else if n < Int64.powerOf10.15 {
+            result &+= 1
+            n &*= 10
+        }
+        
+        self = (self < 0) ? -n : n
+        return result
+    }
+}
+
+/// MARK: -
+
+internal extension Int64 {
+    /// 40k bytes
+    static let lookUpTable: UnsafeMutableRawPointer = {
+        var result = UnsafeMutableRawPointer.allocate(byteCount: 40_000, alignment: 8)
+        var fill = result
+        for i in 0...9999 {
+            var val = i
+            fill.storeBytes(of: UInt8(val / 1000) + 48, as: UInt8.self)
+            val %= 1000
+            fill += 1
+            fill.storeBytes(of: UInt8(val / 100) + 48, as: UInt8.self)
+            val %= 100
+            fill += 1
+            fill.storeBytes(of: UInt8(val / 10) + 48, as: UInt8.self)
+            val %= 10
+            fill += 1
+            fill.storeBytes(of: UInt8(val) + 48, as: UInt8.self)
+            fill += 1
+        }
+        return result
+    }()
+    
+    /// Converts number to decimal and produces the string.
+    ///
+    /// It returns  a pointer to the beginning of the string. No leading zeros are produced, and no terminating null is produced.
+    /// The low-order digit of the result always occupies memory position end-1.
+    /// The behavior is undefined if number is negative. A single zero digit is produced if number is 0.
+    /// - parameter end: Pointer to the end of the buffer.
+    /// - returns: Pointer to beginning of the string.
+    func toString(end: UnsafeMutableRawPointer) -> UnsafeMutablePointer<UInt8> {
+        var x = self
+        var result = end
+        
+        while x >= 10000 {
+            let y = Int(x % 10000)
+            x /= 10000
+            result -= 4
+            memcpy(result, Int64.lookUpTable + y * 4, 4)
+        }
+        
+        var dig = 1
+        if x >= 100 {
+            if x >= 1000 {
+                dig = 4
+            } else {
+                dig = 3
+            }
+        } else if x >= 10 {
+            dig = 2
+        }
+        result -= dig
+        
+        memcpy(result, Int64.lookUpTable + Int(x) * 4 + 4 - dig, dig)
+        return .init(OpaquePointer(result))
     }
 }

@@ -10,7 +10,7 @@ internal enum Benchmark {
         var s = start
         s /= Double(10) // my value in sec
         s /= Double(60) // my value in min
-        var ret: String = ""
+        var result: String = ""
         for _ in 0...9999 {
             
             let ppm: Double = 9.9
@@ -20,11 +20,11 @@ internal enum Benchmark {
             let tax = net * taxrate
             let gross = net + tax
             
-            ret = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
+            result = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
             //        ret = s.description + ", net: " + net.description + ", tax: " + tax.description + ", gross: " + gross.description
             s += 1.1
         }
-        return ret
+        return result
     }
 }
 
@@ -36,7 +36,7 @@ extension Benchmark {
         var s = start
         s /= Decimal(10) // my value in sec
         s /= Decimal(60) // my value in min
-        var ret: String = ""
+        var result: String = ""
         for _ in 0...9999 {
             
             let ppm: Decimal = 9.9
@@ -46,10 +46,10 @@ extension Benchmark {
             let tax = net * taxrate
             let gross = net + tax
             
-            ret = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
+            result = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
             s += 1.1
         }
-        return ret
+        return result
     }
 }
 
@@ -61,9 +61,9 @@ extension Benchmark {
         var s = start
         s /= DecimalFP64(10) // my value in sec
         s /= DecimalFP64(60) // my value in min
-        var ret: String = ""
+        
+        var result: String = ""
         for _ in 0...9999 {
-            
             let ppm: DecimalFP64 = 9.9
             
             let net = s * ppm
@@ -71,10 +71,10 @@ extension Benchmark {
             let tax = net * taxrate
             let gross = net + tax
             
-            ret = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
+            result = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
             s += 1.1
         }
-        return ret
+        return result
     }
 }
 
@@ -86,9 +86,9 @@ extension Benchmark {
         var s = start
         s /= Decimal64(10) // my value in sec
         s /= Decimal64(60) // my value in min
-        var ret: String = ""
+        
+        var result: String = ""
         for _ in 0...9999 {
-            
             let ppm: Decimal64 = 9.9
             
             let net = s * ppm
@@ -96,10 +96,10 @@ extension Benchmark {
             let tax = net * taxrate
             let gross = net + tax
             
-            ret = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
+            result = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
             s += 1.1
         }
-        return ret
+        return result
     }
 }
 
@@ -113,7 +113,7 @@ extension Benchmark {
         var s = start
         s /= T(10) // my value in sec
         s /= T(60) // my value in min
-        var ret: String = ""
+        var result: String = ""
         for _ in 0...9999 {
             
             let ppm: T = 9.9
@@ -123,9 +123,9 @@ extension Benchmark {
             let tax = net * taxrate
             let gross = net + tax
             
-            ret = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
+            result = "\(s), net: \(net), tax: \(tax), gross: \(gross)"
             s += 1.1
         }
-        return ret
+        return result
     }
 }
