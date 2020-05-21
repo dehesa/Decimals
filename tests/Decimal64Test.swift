@@ -16,7 +16,7 @@ extension Decimal64Test {
 }
 
 extension BinaryInteger {
-    fileprivate var binaryDescription: String {
+    fileprivate var binary: String {
         var binaryString = ""
         var internalNumber = self
         var counter = 0
