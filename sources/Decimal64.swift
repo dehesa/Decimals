@@ -3,12 +3,12 @@ import Foundation
 // MARK: - Static Functionality
 
 extension Decimal64 {
-    /// The type used to store both the mantissa and the exponent.
-    internal typealias InternalStorage = Int64
     /// A type that represents the encoded significand of a value.
     public typealias Significand = Int64
     /// A type that can represent any written exponent.
     public typealias Exponent = Int
+    /// The type used to store both the mantissa and the exponent.
+    @usableFromInline internal typealias InternalStorage = Int64
     
     /// The radix, or base of exponentiation, for a floating-point type.
     @_transparent public static var radix: Int { 10 }
@@ -27,9 +27,9 @@ extension Decimal64 {
     public static var leastNonzeroMagnitude: Self { .init(significand: 1, exponent: Self.leastExponent) }
     
     /// Bit-mask matching the exponent.
-    @_transparent internal static var exponentMask: Int64 { .init(bitPattern: 0x1FF) }
+    @usableFromInline @_transparent internal static var exponentMask: Int64 { .init(bitPattern: 0x1FF) }
     /// Bit-mask matching the sign bit.
-    @_transparent internal static var signMask: Int64 { .init(bitPattern: 0x8000000000000000) }
+    @_transparent private static var signMask: Int64 { .init(bitPattern: 0x8000000000000000) }
 }
 
 
@@ -52,12 +52,12 @@ extension Decimal64 {
 ///
 public struct Decimal64 {
     /// Internal storage of 64 bytes composed of 55 bit for a significand and 9 bits for the exponent.
-    internal private(set) var _data: InternalStorage = 0
+    @usableFromInline internal private(set) var _data: InternalStorage = 0
     
     /// Designated initializer passing the exact bytes for the internal storage.
     /// - attention: This initializer just stores the bytes. It doesn't do any validation.
     /// - parameter storage: The bytes representing the decimal number.
-    @_transparent internal init(storage: InternalStorage) {
+    @usableFromInline @_transparent internal init(storage: InternalStorage) {
         self._data = storage
     }
     
@@ -66,7 +66,7 @@ public struct Decimal64 {
     /// - parameter significand: The number to be multiplied by `10^exponent`.
     /// - parameter exponent: The exponent that `10` will be raised to.
     /// - returns: A decimal number returned by the formula: `number = significand * (10 ^ exponent)`.
-    @_transparent internal init(significand: Significand, exponent: Exponent) {
+    @usableFromInline @_transparent internal init(significand: Significand, exponent: Exponent) {
         let exp = (significand < 0) ? -exponent: exponent
         self.init(storage: (significand << Self.exponentBitCount) | (InternalStorage(exp) & Self.exponentMask))
     }
@@ -86,12 +86,12 @@ public struct Decimal64 {
     }
     
     /// The significand of the floating-point value.
-    public var significand: Significand {
+    @_transparent public var significand: Significand {
         self._data >> Self.exponentBitCount
     }
     
     /// The exponent of the floating-point value.
-    public var exponent: Exponent {
+    @_transparent public var exponent: Exponent {
         // To access the exponent we have to use the absolute value, since the internal storage is a two's complement.
         let absolute = self.isNegative ? -self._data : self._data
         // The left-shift right-shift sequence restores the sign of the exponent
@@ -161,7 +161,7 @@ extension Decimal64: Comparable {
 }
 
 extension Decimal64: AdditiveArithmetic {
-    public static var zero: Self {
+    @_transparent public static var zero: Self {
         .init(storage: 0)
     }
     
@@ -188,28 +188,28 @@ extension Decimal64: AdditiveArithmetic {
     }
     
     public static func -=(_ lsh: inout Self, _ rhs: Self) {
-        let sign = lsh.isNegative
+        let leftSign = lsh.isNegative
         
-        if sign == rhs.isNegative {
-            lsh.subtractFromThis(rhs, sign)
+        if leftSign == rhs.isNegative {
+            lsh.subtractFromThis(rhs, leftSign)
         } else {
-            lsh.addToThis(rhs, sign);
+            lsh.addToThis(rhs, leftSign);
         }
     }
 }
 
 extension Decimal64: Numeric {
-    public init?<T>(exactly source: T) where T: BinaryInteger {
+    @_transparent public init?<T>(exactly source: T) where T: BinaryInteger {
         guard source.magnitude < 10_000_000_000_000_000 else { return nil }
         self.init(storage: Int64(truncatingIfNeeded: source) << Self.exponentBitCount)
     }
     
-    public var magnitude: Self {
+    @_transparent public var magnitude: Self {
         guard self.isNegative else { return self }
         return .init(storage: -self._data)
     }
     
-    public static func * (_ lhs: Self, _ rhs: Self) -> Self {
+    @_transparent public static func * (_ lhs: Self, _ rhs: Self) -> Self {
         var result = lhs
         result *= rhs
         return result
@@ -266,11 +266,11 @@ extension Decimal64: Numeric {
 }
 
 extension Decimal64: SignedNumeric {
-    public mutating func negate() {
+    @_transparent public mutating func negate() {
         self._data = -self._data
     }
     
-    public prefix static func - (operand: Self) -> Self {
+    @_transparent public prefix static func - (operand: Self) -> Self {
         .init(storage: -operand._data)
     }
 }
@@ -286,7 +286,7 @@ extension Decimal64: Strideable {
 }
 
 extension Decimal64: ExpressibleByIntegerLiteral {
-    public init(integerLiteral value: Int64) {
+    @_transparent public init(integerLiteral value: Int64) {
         precondition(Swift.abs(value) < 10_000_000_000_000_000)
         self.init(storage: value << Self.exponentBitCount)
     }
@@ -309,7 +309,7 @@ extension Decimal64 /*: FloatingPoint*/ {
     /// The sign of the floating-point value.
     ///
     /// The sign is `.minus` if the value is negative and `.plus` if the value is zero or positive.
-    public var sign: FloatingPointSign {
+    @_transparent public var sign: FloatingPointSign {
         (self.isNegative) ? .minus : .plus
     }
     
@@ -489,12 +489,12 @@ extension Decimal64 /*: FloatingPoint*/ {
 
 extension Decimal64 {
     /// The mathematical constant `π`.
-    public static var pi: Self {
+    @_transparent public static var pi: Self {
         .init(significand: 3141592653589793, exponent: -15)
     }
     
     /// The mathematical constant `𝝉`.
-    public static var tau: Self {
+    @_transparent public static var tau: Self {
         .init(significand: 6283185307179586, exponent: -15)
     }
     
@@ -625,16 +625,16 @@ extension Decimal64 {
     /// Returns true if the represented decimal is a negative value.
     ///
     /// Zero and positive values return `false`.
-    @_transparent internal var isNegative: Bool {
+    @usableFromInline @_transparent internal var isNegative: Bool {
         self._data < 0
     }
     
-    public mutating func normalize() {
+    @_transparent public mutating func normalize() {
         self._data = self.normalized()._data
     }
     
+    // TODO: I am not sure this is doing what is suppose to do.
     public func normalized() -> Self {
-        #warning("It doesn't seem to do what is suppose to do")
         var significand = self.significand
         guard significand != 0 else { return Self.zero }
         /// make exp as small as possible (min is -256)
@@ -741,11 +741,10 @@ extension Decimal64 {
         }
     }
 
-    ///  Compute the sum of the absolute values of this and a second Decimal64.
-    ///  All signs are ignored !
-    ///
-    /// @param   right    Summand.
-    mutating func addToThis(_ right: Decimal64, _ negative: Bool) {
+    /// Compute the sum of the absolute values of the receiving number and a second decimal number.
+    /// - attention: All signs are ignored!
+    /// - parameter right: Summand.
+    private mutating func addToThis(_ right: Decimal64, _ negative: Bool) {
         var myExp = self.exponent
         var otherExp = right.exponent
 
@@ -810,7 +809,7 @@ extension Decimal64 {
     /// The sign is flipped if the result is negative.
     /// - parameter right: Subtrahend
     /// - parameter negative: flag if ... is negative
-    mutating func subtractFromThis(_ right: Decimal64, _ negative: Bool) {
+    private mutating func subtractFromThis(_ right: Decimal64, _ negative: Bool) {
         var myExp = self.exponent
         var otherExp = right.exponent
 
@@ -873,28 +872,146 @@ extension Decimal64 {
 
 extension Decimal64: CustomStringConvertible {
     public var description: String {
+        var significand = self.significand
+        
+        if significand == 0 {
+            return "0"
+        } else if significand < 0 {
+            significand = -significand
+        }
+        
         var data: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
                   ) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-        return String(cString: toChar(&data.0))
+        return withUnsafeMutablePointer(to: &data.0) {
+            var exp = self.exponent
+            var end = $0.advanced(by: 30)
+            var start = significand.toString(end: end)
+            
+            if ( exp < 0 ) {
+                end -= 1
+                
+                // Try to set a decimal point to make exp equal to zero.
+                // Strip off trailing zeroes.
+                while ( end.pointee == 0x30 ) && ( exp < 0 ) {
+                    end -= 1
+                    exp += 1
+                }
+                
+                if exp < 0 {
+                    if exp > start - end - 6 {
+                        // Add maximal 6 additional chars left from digits to get
+                        // 0.nnn, 0.0nnn, 0.00nnn, 0.000nnn, 0.0000nnn or 0.00000nnn.
+                        // The result may have more than 16 digits.
+                        while start - end > exp {
+                            start -= 1
+                            start.pointee = 0x30 // 0
+                        }
+                    }
+                    
+                    let dotPos = ( end - start ) + exp + 1;
+                    // exp < 0 therefore start + dotPos <= end.
+                    if dotPos > 0 {
+                        memmove( start + dotPos + 1, start + dotPos, 1 - exp )
+                        start[ dotPos ] = 0x2E // .
+                        exp = 0
+                        end += 2
+                    }
+                    else {
+                        if end != start {
+                            let startMinusOne = start.advanced(by: -1)
+                            startMinusOne.pointee = start.pointee
+                            start.pointee = 0x2E // .
+                            start -= 1
+                        }
+                        
+                        exp = 1 - dotPos
+                        
+                        end += 1
+                        end.pointee = 0x45 // E
+                        end += 1
+                        end.pointee = 0x2D // -
+                        
+                        end += 2
+                        if exp >= 10 {
+                            end += 1
+                        }
+                        if exp >= 100 {
+                            end += 1
+                        }
+                        _ = Int64(exp).toString(end: end)
+                    }
+                }
+                else {
+                    end += 1
+                }
+            }
+            else if exp + end - start > 16 {
+                end -= 1
+                
+                exp += end - start //TODO: will it work on 64bit?
+                
+                while  end.pointee == 0x30 { // 0
+                    end -= 1
+                }
+                
+                if end != start {
+                    let startMinusOne = start.advanced(by: -1)
+                    startMinusOne.pointee = start.pointee
+                    start.pointee = 0x2E // .
+                    start -= 1
+                }
+                end += 1
+                end.pointee = 0x45 // E
+                end += 1
+                end.pointee = 0x2B // +
+                
+                end += 2
+                if exp >= 10 {
+                    end += 1
+                }
+                if exp >= 100 {
+                    end += 1
+                }
+                _ = Int64(exp).toString(end: end)
+            }
+            else {
+                while exp > 0 {
+                    end.pointee = 0x30 // 0
+                    end += 1
+                    exp -= 1
+                }
+            }
+            
+            if self.isNegative {
+                start -= 1
+                start.pointee = 0x2D // -
+            }
+            
+            end.pointee = 0
+            
+            return String(cString: start)
+        }
     }
 }
 
 extension Decimal64: TextOutputStreamable {
     public func write<Target>(to target: inout Target) where Target: TextOutputStream {
+        var significand = self.significand
+        
+        if significand == 0 {
+            return target.write("0")
+        } else if significand < 0 {
+            significand = -significand
+        }
+        
         var data: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8
                   ) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-        var significand = self.significand
-        guard significand != 0 else { return target.write("0") }
-
-        if significand < 0 {
-            significand = -significand
-        }
 
         var exp = self.exponent
         withUnsafeMutablePointer(to: &data.30) {
@@ -1002,127 +1119,5 @@ extension Decimal64: TextOutputStreamable {
             end.pointee = 0
             target._writeASCII(.init(start: start, count: end - start))
         }
-    }
-}
-
-//converting to String
-extension Decimal64 {
-    private func toChar(_ buffer: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8> {
-        var man = self.significand
-
-        if man == 0 {
-            buffer.pointee = UTF8.encode("0")!.first!
-            return buffer
-        } else if man < 0 {
-            man = -man
-        }
-
-        var exp = self.exponent
-        var end = buffer.advanced(by: 30)
-        var start = man.toString(end: end)
-
-        if ( exp < 0 ) {
-            end -= 1
-
-            // Try to set a decimal point to make exp equal to zero.
-            // Strip off trailing zeroes.
-            while ( end.pointee == 0x30 ) && ( exp < 0 ) {
-                end -= 1
-                exp += 1
-            }
-
-            if exp < 0 {
-                if exp > start - end - 6 {
-                    // Add maximal 6 additional chars left from digits to get
-                    // 0.nnn, 0.0nnn, 0.00nnn, 0.000nnn, 0.0000nnn or 0.00000nnn.
-                    // The result may have more than 16 digits.
-                    while start - end > exp {
-                        start -= 1
-                        start.pointee = 0x30 // 0
-                    }
-                }
-
-                let dotPos = ( end - start ) + exp + 1;
-                // exp < 0 therefore start + dotPos <= end.
-                if dotPos > 0 {
-                    memmove( start + dotPos + 1, start + dotPos, 1 - exp )
-                    start[ dotPos ] = 0x2E // .
-                    exp = 0
-                    end += 2
-                }
-                else {
-                    if end != start {
-                        let startMinusOne = start.advanced(by: -1)
-                        startMinusOne.pointee = start.pointee
-                        start.pointee = 0x2E // .
-                        start -= 1
-                    }
-
-                    exp = 1 - dotPos
-
-                    end += 1
-                    end.pointee = 0x45 // E
-                    end += 1
-                    end.pointee = 0x2D // -
-
-                    end += 2
-                    if exp >= 10 {
-                        end += 1
-                    }
-                    if exp >= 100 {
-                        end += 1
-                    }
-                    _ = Int64(exp).toString(end: end)
-                }
-            }
-            else {
-                end += 1
-            }
-        }
-        else if exp + end - start > 16 {
-            end -= 1
-
-            exp += end - start //TODO: will it work on 64bit?
-
-            while  end.pointee == 0x30 { // 0
-                end -= 1
-            }
-
-            if end != start {
-                let startMinusOne = start.advanced(by: -1)
-                startMinusOne.pointee = start.pointee
-                start.pointee = 0x2E // .
-                start -= 1
-            }
-            end += 1
-            end.pointee = 0x45 // E
-            end += 1
-            end.pointee = 0x2B // +
-
-            end += 2
-            if exp >= 10 {
-                end += 1
-            }
-            if exp >= 100 {
-                end += 1
-            }
-            _ = Int64(exp).toString(end: end)
-        }
-        else {
-            while exp > 0 {
-                end.pointee = 0x30 // 0
-                end += 1
-                exp -= 1
-            }
-        }
-
-        if self.isNegative {
-            start -= 1
-            start.pointee = 0x2D // -
-        }
-
-        end.pointee = 0
-
-        return start
     }
 }

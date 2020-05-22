@@ -2,8 +2,7 @@ import Foundation
 
 internal extension Int64 {
     /// Cache for the first 18 values of 10 to the power of n (for performance purposes).
-    static let powerOf10 = (
-                                1 as Int64, // 0
+    static let powerOf10 = (    1 as Int64, // 0
                                10 as Int64, // 1
                               100 as Int64, // 2
                             1_000 as Int64, // 3
@@ -253,7 +252,7 @@ internal extension Int64 {
     /// Internal helper function to shift a number to the left until it fills 16 digits.
     /// - attention: The receiving number must not have more than 18 digits
     /// - returns: Count of shifted digits
-    mutating func toMaximumDigits() -> Int {
+    @_transparent mutating func toMaximumDigits() -> Int {
         if self == 0 { return 0 }
         var n = abs(self)
         var result = 0
