@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [],
     targets: [
         .target(name: "Decimals", dependencies: [], path: "sources"),
+        .target(name: "DecimalsBenchmarks", dependencies: ["Decimals"], path: "benchmarks"),
         .testTarget(name: "DecimalsTests", dependencies: ["Decimals"], path: "tests"),
-        .target(name: "DecimalsBenchmarks", dependencies: ["Decimals"], path: "benchmarks")
     ]
 )
