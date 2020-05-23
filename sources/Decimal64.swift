@@ -19,6 +19,13 @@ public struct Decimal64 {
     @usableFromInline internal typealias InternalStorage = Int64
     /// Internal storage of 64 bytes composed of 55 bit for a significand and 9 bits for the exponent.
     @usableFromInline internal private(set) var _data: InternalStorage = 0
+    
+    /// Designated initializer passing the exact bytes for the internal storage.
+    /// - attention: This initializer just stores the bytes. It doesn't do any validation.
+    /// - parameter storage: The bytes representing the decimal number.
+    @usableFromInline @_transparent internal init(storage: InternalStorage) {
+        self._data = storage
+    }
 }
 
 // MARK: -
@@ -583,13 +590,6 @@ extension Decimal64 {
     /// A type that represents the encoded significand of a value.
     public typealias Significand = Int64
     
-    /// Designated initializer passing the exact bytes for the internal storage.
-    /// - attention: This initializer just stores the bytes. It doesn't do any validation.
-    /// - parameter storage: The bytes representing the decimal number.
-    @usableFromInline @_transparent internal init(storage: InternalStorage) {
-        self._data = storage
-    }
-    
     /// Convenience initializer passing the significand and exponent to be stored internally.
     /// - attention: This initializer just stores the bytes. It doesn't do any validation.
     /// - parameter significand: The number to be multiplied by `10^exponent`.
@@ -615,12 +615,17 @@ extension Decimal64 {
     }
     
     public init?(_ value: Double) {
-        let value = Swift.abs(value)
-        let exp = Int(log10(value) - 15)
-        let man = Int64(value / pow(10.0, Double(exp)) + 0.5)
+        guard value.isFinite else { return nil }
         
-        let significand: Significand = (value < 0) ? -man: man
-        self.init(significand, raisedBy: exp)
+        if value.isZero {
+            self = .zero
+        } else {
+            let val = Swift.abs(value)
+            let exp = Int(log10(val) - 15)
+            let man = Int64(val / pow(10.0, Double(exp)) + 0.5)
+            let significand: Significand = (value < 0) ? -man: man
+            self.init(significand, raisedBy: exp)
+        }
     }
     
     /// Creates a decimal number from the given string (if possible).

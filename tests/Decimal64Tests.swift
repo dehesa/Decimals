@@ -1,6 +1,7 @@
 import Decimals
 import XCTest
 
+/// Tests decimal number regular cases.
 final class Decimal64Test: XCTestCase {
     override func setUp() {
         self.continueAfterFailure = false
@@ -8,29 +9,22 @@ final class Decimal64Test: XCTestCase {
 }
 
 extension Decimal64Test {
-    func testPi() {
-        let hardcoded = Decimal64("3.141592653589793")
-        let generated = Decimal64.pi
-        XCTAssertEqual(hardcoded, generated)
+    /// Tests the π and 𝝉 math constants.
+    func testMathConstants() {
+        let hardcodedπ = Decimal64("3.141592653589793")
+        let generatedπ = Decimal64.pi
+        XCTAssertEqual(hardcodedπ, generatedπ)
+        
+        let hardcoded𝝉 = Decimal64("6.283185307179586")
+        let generated𝝉 = Decimal64.tau
+        XCTAssertEqual(hardcoded𝝉, generated𝝉)
     }
-}
-
-extension BinaryInteger {
-    fileprivate var binary: String {
-        var binaryString = ""
-        var internalNumber = self
-        var counter = 0
-        
-        for _ in (1...self.bitWidth) {
-            binaryString.insert(contentsOf: "\(internalNumber & 1)", at: binaryString.startIndex)
-            internalNumber >>= 1
-            counter += 1
-            if counter % 4 == 0 {
-                binaryString.insert(contentsOf: " ", at: binaryString.startIndex)
-            }
-        }
-        
-        return binaryString
+    
+    /// Test `Double` conversion.
+    func testDouble() {
+        let numbers: [Double] = [3.14, -3.14, 0.0, .infinity, -.infinity, .nan]
+        let results: [Decimal64?] = ["3.14", "-3.14", .zero, nil, nil, nil]
+        XCTAssertEqual(numbers.map(Decimal64.init), results)
     }
 }
 

@@ -10,6 +10,14 @@ public struct DecimalFP64 {
     @usableFromInline internal typealias InternalStorage = Int64
     /// Internal storage of 64 bytes composed.
     @usableFromInline internal private(set) var _data: InternalStorage = 0
+    
+    public init( _ mantissa: Int64, _ exponent: Int = 0, _ negative: Bool = false) {
+        self.setComponents(mantissa, exponent, negative)
+    }
+    
+    public init(_ mantissa: UInt64, _ exponent: Int = 0, _ negative: Bool = false) {
+        self.setComponents(Int64(mantissa), exponent, negative) // will overflow if greater >Int64.max
+    }
 }
 
 // MARK: -
@@ -837,14 +845,6 @@ extension DecimalFP64 {
     
     public init(_ value: UInt, _ exponent: Exponent = 0) {
         self.init(Int64(value), exponent)
-    }
-    
-    public init( _ mantissa: Int64, _ exponent: Int = 0, _ negative: Bool = false) {
-        self.setComponents(mantissa, exponent, negative)
-    }
-    
-    public init(_ mantissa: UInt64, _ exponent: Int = 0, _ negative: Bool = false) {
-        self.setComponents(Int64(mantissa), exponent, negative) // will overflow if greater >Int64.max
     }
     
     public init(_ value: Double) {
