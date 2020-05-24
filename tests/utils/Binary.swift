@@ -1,5 +1,6 @@
 extension BinaryInteger {
-    fileprivate var binary: String {
+    /// Prints the underlying bits representing the receiving integer.
+    internal var binary: String {
         var binaryString = ""
         var internalNumber = self
         var counter = 0

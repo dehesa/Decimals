@@ -2,8 +2,7 @@ import Foundation
 
 /// Custom implementation for a decimal type.
 ///
-/// It uses 55 bits for the significand and 9 bits for exponent; both will be stored as twos complement in case of negative numbers.
-/// The significand doesn't have to be normalized (although it is better if it is).
+/// It uses 55 bits for the significand and 9 bits for exponent (both are two's complement).
 ///
 ///     63                                          9 8            0
 ///     +--------------------------------------------+-----------+
@@ -14,6 +13,9 @@ import Foundation
 ///
 ///     number = significand * (10 ^ exponent)
 ///
+/// This decimal number implementation has some interesting quirks:
+/// - It doesn't express the concept of Infinite or NaN (it will simply crash on invalid operations, such as dividing by zero).
+/// - Only 16 decimal digits may be expressed (i.e. `1234567890123456` or `123456.7890123456` or `123456789012345.6`, etc).
 public struct Decimal64 {
     /// The type used to store both the mantissa and the exponent.
     @usableFromInline internal typealias InternalStorage = Int64
@@ -35,15 +37,15 @@ extension Decimal64: Equatable {
         if lhs._data == rhs._data { return true }
         
         var (leftSignificand, rightSifnificand) = (lhs.significand, rhs.significand)
-        if leftSignificand == 0 && rightSifnificand == 0 { return true }
+        if (leftSignificand == 0) && (rightSifnificand == 0) { return true }
         
         let diff = lhs.exponent &- rhs.exponent
+        // lhs has a greater exponent than rhs.
         if diff > 0 {
-            // lhs has a bigger exponent.
             let shift = leftSignificand.shiftLeftTo17(limit: diff)
             if (shift == diff) && (leftSignificand == rightSifnificand) { return true }
+        // lhs has a lesser exponent than rhs.
         } else if diff < 0 {
-            // rhs has a bigger exponent, i.e. smaller significand if it is equal.
             let limit = -diff
             let shift = rightSifnificand.shiftLeftTo17(limit: limit)
             if (shift == limit) && (rightSifnificand == leftSignificand) { return true }
@@ -64,15 +66,15 @@ extension Decimal64: Comparable {
     public static func < (_ lhs: Self, _ rhs: Self) -> Bool {
         if lhs._data == rhs._data { return false }
         
-        let ln = lhs.normalized(), rn = rhs.normalized()
-        let le = ln.exponent, re = rn.exponent
+        let (leftNormal, rightNormal) = (lhs.normalized(), rhs.normalized())
+        let (leftExponent, rightExponent) = (leftNormal.exponent, rightNormal.exponent)
         
-        if le == re {
-            return ln.significand < rn.significand
-        } else if le < re {
-            return !rn.isNegative
+        if leftExponent == rightExponent {
+            return leftNormal.significand < rightNormal.significand
+        } else if leftExponent < rightExponent {
+            return !rightNormal.isNegative
         } else {
-            return ln.isNegative
+            return leftNormal.isNegative
         }
     }
     
@@ -699,7 +701,8 @@ extension Decimal64 {
     /// - parameter exponent: The exponent that `10` will be raised to.
     /// - returns: A decimal number returned by the formula: `number = significand * (10 ^ exponent)`.
     @usableFromInline @_transparent internal init(significand: Significand, exponent: Exponent) {
-        let exp = (significand < 0) ? -exponent: exponent
+        // Negative values, negate the exponent.
+        let exp = (significand < 0) ? -exponent : exponent
         self.init(storage: (significand << Self.exponentBitCount) | (InternalStorage(exp) & Self.exponentMask))
     }
     
@@ -731,24 +734,26 @@ extension Decimal64 {
         }
     }
     
+    /// The number of bits used to represent the type’s exponent.
+    @_transparent public static var exponentBitCount: Int { 9 }
+    /// The available number of fractional significand bits.
+    @_transparent public static var significandBitCount: Int { 55 }
+    
+    /// The maximum exponent. The formula is: `(2 ^ exponentBitCount) / 2 - 1`.
+    @_transparent private static var greatestExponent: Int { 255 }
+    /// The minimum exponent. The formula is: `-(2 ^ exponentBitCount) / 2`
+    @_transparent private static var leastExponent: Int { -256 }
+    
     /// Bit-mask matching the exponent.
     @usableFromInline @_transparent internal static var exponentMask: InternalStorage { .init(bitPattern: 0x1FF) }
     /// Bit-mask matching the sign bit.
     @_transparent private static var signMask: InternalStorage { .init(bitPattern: 0x8000000000000000) }
-    /// The bit-size of the internal exponent.
-    @_transparent public static var exponentBitCount: Int {9 }
-    /// The bit-size of the internal mantissa.
-    @_transparent public static var significandBitCount: Int { 55 }
-    /// The maximum exponent.
-    @_transparent public static var greatestExponent: Int { 255 }
-    /// The minimum exponent.
-    @_transparent public static var leastExponent: Int { -256 }
     
     /// The exponent of the floating-point value.
     @_transparent public var exponent: Exponent {
-        // To access the exponent we have to use the absolute value, since the internal storage is a two's complement.
+        // If the significand is negative, the exponent has been previously negated.
         let absolute = self.isNegative ? -self._data : self._data
-        // The left-shift right-shift sequence restores the sign of the exponent
+        // The left-shift right-shift sequence restores the sign of the exponent.
         return .init( ((absolute & Self.exponentMask) << Self.significandBitCount) >> Self.significandBitCount )
     }
     
@@ -788,108 +793,80 @@ extension Decimal64 {
     ///     // z == 6
     ///
     /// - parameter rule: The rounding rule to use.
-    /// - parameter scale: The number of digits a rounded value should have after its decimal point.
+    /// - parameter scale: The number of digits a rounded value should have after its decimal point. It must be zero or a positive number; otherwise, the program will crash.
     public mutating func round(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero, scale: Int = 0) {
-        let expScale = self.exponent + scale
-        
-        if expScale < 0 {
-            let isNegative = self.isNegative
-            var significand = self.significand
-            #warning("Round bug starts here")
-            var remainder: Int64 = 0
-            var half: Int64 = 5
-            if rule != .towardZero {
-                if expScale >= -16  {
-                    remainder = significand % Int64.tenToThePower(of: -expScale)
-                } else if significand != 0 {
-                    remainder = 1
-                }
-                
-                if (rule != .awayFromZero) && (expScale >= -18) {
-                    half &*= Int64.tenToThePower(of: -expScale &- 1)
-                }
-            }
-            
-            // first round down
-            significand.shift(decimalDigits: expScale)
-            
-            switch rule {
-            case .toNearestOrAwayFromZero:
-                if remainder >= half {
-                    significand &+= 1
-                }
-            case .toNearestOrEven:
-                if (remainder > half) || ((remainder == half) && ((significand & Int64(1)) != 0)) {
-                    significand &+= 1
-                }
-            case .towardZero:
-                break
-            case .awayFromZero:
-                if remainder != 0 {
-                    significand &+= 1
-                }
-            case .down:
-                if isNegative && (remainder != 0) {
-                    significand &+= 1
-                }
-            case .up:
-                if !isNegative && (remainder != 0) {
-                    significand &+= 1
-                }
-            @unknown default:
-                fatalError("\(Self.self) doesn't yet support \(rule)")
-            }
-            
-            self._data = significand << Self.exponentBitCount
-            self._data |= Int64(-scale)
-        } else if expScale > 0 {
-            // TODO: should work with negative scale
-            fatalError("\(Self.self) doesn't support negative scales")
-        }
+        self._data = self.rounded(rule, scale: scale)._data
     }
     
     /// Rounds the value to an integral value using the specified rounding rule.
     /// - parameter rule: The rounding rule to use.
-    /// - parameter scale: The number of digits a rounded value should have after its decimal point.
-    @_transparent public func rounded(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero, scale: Int = 0) -> Self {
-        var result = self
-        result.round(rule, scale: scale)
-        return result
+    /// - parameter scale: The number of digits a rounded value should have after its decimal point.  It must be zero or a positive number; otherwise, the program will crash.
+    public func rounded(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero, scale: Int = 0) -> Self {
+        precondition(scale >= 0)
+        
+        let exponent = self.exponent
+        let shift = -(exponent + scale)
+        guard shift > 0 else { return self }
+        
+        var significand = self.significand
+        let divisor = Int64.tenToThePower(of: shift)
+        let remainder = significand % divisor
+        significand /= divisor
+        
+        switch rule {
+        case .towardZero:
+            break
+        case .up:
+            guard remainder > 0 else { break }
+            significand &+= 1
+        case .down:
+            guard remainder < 0 else { break }
+            significand &-= 1
+        case .awayFromZero:
+            if remainder > 0 { significand &+= 1 } else
+            if remainder < 0 { significand &-= 1 }
+        case .toNearestOrAwayFromZero:
+            guard abs(remainder) >= (divisor / 2) else { break }
+            if remainder > 0 { significand &+= 1 } else
+            if remainder < 0 { significand &-= 1 }
+        case .toNearestOrEven:
+            let (rem, half) = (abs(remainder), divisor / 2)
+            guard (rem > half) || ((rem == half) && ((significand & 1) != 0)) else { break }
+            if remainder > 0 { significand &+= 1 } else
+            if remainder < 0 { significand &-= 1 }
+        @unknown default:
+            fatalError()
+        }
+        return .init(significand: significand, exponent: -scale)
     }
     
     @_transparent public mutating func normalize() {
         self._data = self.normalized()._data
     }
     
-    // TODO: I am not sure this is doing what is suppose to do.
+    // Makes the significand number as large as possible while at the same time making the exponent to have the smallest possible value (min is -256).
     public func normalized() -> Self {
         var significand = self.significand
         guard significand != 0 else { return Self.zero }
-        /// make exp as small as possible (min is -256)
-        var exp = self.exponent
-        exp -= significand.toMaximumDigits()
-        return .init(significand: significand, exponent: exp)
+        
+        var exponent = self.exponent
+        exponent -= significand.toMaximumDigits()
+        return .init(significand: significand, exponent: exponent)
     }
     
-    /// The functions break the number into integral and fractional parts.
-    ///
-    ///
-    ///
+    /// The functions break the number into the integral and the fractional parts.
+    /// - attention: The integral part have sign information; therefore, negative number will still contain the negative sign.
     /// - returns: Tuple containing the _whole_/integral and _decimal_/fractional part.
-    public func decomposed() -> (sign: FloatingPointSign, integral: Decimal64, fractional: Decimal64) {
+    public func decomposed() -> (integral: Decimal64, fractional: Decimal64) {
         let integral = self.rounded(.towardZero, scale: 0)
         var fractional = self - integral
-        var sign: FloatingPointSign = .plus
         
         if fractional.isNegative {
             fractional._data.negate()
-            sign = .minus
         }
-        return (sign, integral, fractional)
+        return (integral, fractional)
     }
 
-    // Keep for rounding functions which may be needed in init
-    // TODO: refactor with better handling of negative values
     private mutating func setComponents(_ man: Int64, _ exp: Int = 0, _ negative: Bool = false) {
         var man = man, exp = exp
         var negative = negative

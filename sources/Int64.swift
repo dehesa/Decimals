@@ -249,45 +249,45 @@ internal extension Int64 {
         return result
     }
 
-    /// Internal helper function to shift a number to the left until it fills 16 digits.
+    /// Shifts a number to the left until it fills 16 digits.
     /// - attention: The receiving number must not have more than 18 digits
-    /// - returns: Count of shifted digits
+    /// - returns: Count of shifted digits.
     @_transparent mutating func toMaximumDigits() -> Int {
-        if self == 0 { return 0 }
-        var n = abs(self)
-        var result = 0
+        guard self != 0 else { return 0 }
+        
+        var (result, count) = (abs(self), 0)
         // self will overflow if pushed left, just shift to 16 digits
         
-        if n < Int64.powerOf10.8 {
-            if n < Int64.powerOf10.4 {
-                result = 12
-                n &*= Int64.powerOf10.12
+        if result < Int64.powerOf10.8 {
+            if result < Int64.powerOf10.4 {
+                count = 12
+                result &*= Int64.powerOf10.12
             } else {
-                result = 8
-                n &*= Int64.powerOf10.8
+                count = 8
+                result &*= Int64.powerOf10.8
             }
         } else {
-            if n < Int64.powerOf10.12 {
-                result = 4
-                n &*= Int64.powerOf10.4
+            if result < Int64.powerOf10.12 {
+                count = 4
+                result &*= Int64.powerOf10.4
             }
         }
         
-        if n < Int64.powerOf10.14 {
-            if n < Int64.powerOf10.13 {
-                result &+= 3
-                n &*= 1000
+        if result < Int64.powerOf10.14 {
+            if result < Int64.powerOf10.13 {
+                count &+= 3
+                result &*= 1000
             } else {
-                result &+= 2
-                n &*= 100
+                count &+= 2
+                result &*= 100
             }
-        } else if n < Int64.powerOf10.15 {
-            result &+= 1
-            n &*= 10
+        } else if result < Int64.powerOf10.15 {
+            count &+= 1
+            result &*= 10
         }
         
-        self = (self < 0) ? -n : n
-        return result
+        self = (self < 0) ? -result : result
+        return count
     }
 }
 
