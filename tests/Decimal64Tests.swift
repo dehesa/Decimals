@@ -26,11 +26,36 @@ extension Decimal64Test {
         let results: [Decimal64?] = ["3.14", "-3.14", .zero, nil, nil, nil]
         XCTAssertEqual(numbers.map(Decimal64.init), results)
     }
+    
+    /// Test the `round()` functionality.
+    func testRound() {
+        let numbers: [Decimal64]   =  ["-5.6", "-5.5", "-5.4", "-5", "0", "5", "5.4", "5.5", "5.6", "6.5"]
+        let dict: [FloatingPointRoundingRule:[Decimal64]] = [
+            .up:                      [  "-5",   "-5",   "-5", "-5", "0", "5",   "6",   "6",   "6",   "7"],
+            .down:                    [  "-6",   "-6",   "-6", "-5", "0", "5",   "5",   "5",   "5",   "6"],
+            .towardZero:              [  "-5",   "-5",   "-5", "-5", "0", "5",   "5",   "5",   "5",   "6"],
+            .awayFromZero:            [  "-6",   "-6",   "-6", "-5", "0", "5",   "6",   "6",   "6",   "7"],
+            .toNearestOrAwayFromZero: [  "-6",   "-6",   "-5", "-5", "0", "5",   "5",   "6",   "6",   "7"],
+            .toNearestOrEven:         [  "-6",   "-6",   "-5", "-5", "0", "5",   "5",   "6",   "6",   "6"]
+        ]
+        
+        for (rule, results) in dict {
+            print(numbers.map { $0.rounded(rule, scale: 0) })
+        }
+    }
+    
+    /// Test the `decomposed()` functionality.
+    func testDecompose() {
+        let numbers: [Decimal64] = [/*"3.14", */"-3.14"/*, .zero*/]
+//        let results: [(Decimal64, Decimal64)] = [(3, "0.14"), (3, "0.14"), (0, 0)]
+        for n in numbers {
+            let decomp = n.decomposed()
+            print(decomp)
+        }
+    }
 }
 
 //extension Decimal64Test {
-//    var s = ""
-//
 //    func testtoMaxDigits() {
 //        // This is an example of a functional test case.
 //        // Use XCTAssert and related functions to verify your tests produce the correct results.

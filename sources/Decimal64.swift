@@ -283,6 +283,7 @@ extension Decimal64 /*: FloatingPoint*/ {
         let otherMan = rhs.significand
         
         if otherMan == 0 {
+            // TODO: Look out
             fatalError()
         } else if (myMan != 0) && (rhs._data != 1) {
             // Calculate new coefficient
@@ -322,7 +323,119 @@ extension Decimal64 /*: FloatingPoint*/ {
     }
 }
 
-extension Decimal64: CustomStringConvertible {
+extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
+    // Creates a decimal number from the given string (if possible). The input in the format is:
+    //
+    //     [`+`|`-`]? `0`..`9`* [`.` `0`..`9`*]? [(`E`|`e`) `0`..`9`*]?
+    //
+    // 1. Optional sign.
+    // 2. Any number of digits as integer part.
+    // 3. Optional a dot with any number of digits as fraction
+    // 4. Optional an e with any number of digits as exponent
+    public init?(_ value: String) {
+        func isDigit(_ c: Character?) -> Bool { c != nil && c! >= "0" && c! <= "9" }
+        
+        var iterator = value.makeIterator()
+        var c: Character?
+        
+        // Ignore whitespaces.
+        repeat {
+            c = iterator.next()
+        } while c == " "
+        
+        // 1. Check sign
+        let isNegative = c == "-"
+        if isNegative || c == "+" {
+            c = iterator.next()
+        }
+        
+        // Ignore leading zeros.
+        while c != nil && c! == "0" {
+            c = iterator.next()
+        }
+        
+        var man: Int64 = 0
+        var exp: Int = 0
+        var dig: Int = 0
+        
+        // check integer part
+        while isDigit(c) && (dig < 18) {
+            dig += 1
+            man *= 10
+            man += Int64(c!.asciiValue! - 48)
+            c = iterator.next()
+        }
+        
+        // maybe we have more digits for our precision
+        while isDigit(c) {
+            exp += 1
+            c = iterator.next()
+        }
+        
+        // check fraction part
+        if c != nil && c! == "." {
+            c = iterator.next()
+            
+            if man == 0 {
+                while c != nil && c! == "0" {
+                    exp -= 1
+                    c = iterator.next()
+                }
+            }
+            
+            while isDigit(c) && (dig < 18) {
+                dig += 1
+                exp -= 1
+                man *= 10
+                man += Int64(c!.asciiValue! - 48)
+                c = iterator.next()
+            }
+            
+            // maybe we have more digits -> just ignore
+            while isDigit(c) {
+                c = iterator.next()
+            }
+        }
+        
+        if isNegative {
+            man = -man
+        }
+        
+        if (c != nil) && ((c! == "e") || (c! == "E")) {
+            c = iterator.next()
+            dig = 0
+            var e = 0
+            var expSign = 1
+            
+            if (c != nil) && ((c! == "-") || (c! == "+")) {
+                expSign = (c! == "-") ? -1 : 1
+                c = iterator.next()
+            }
+            
+            while c != nil && c! == "0" {
+                c = iterator.next()
+            }
+            
+            while isDigit(c) && (dig < 3) {
+                dig += 1
+                e *= 10
+                e += Int(c!.asciiValue!) - 48
+                c = iterator.next()
+            }
+            
+            exp += e * expSign
+            
+            if isDigit(c) {
+                while isDigit(c) {
+                    c = iterator.next()
+                }
+                return nil
+            }
+        }
+        
+        self.init(man, raisedBy: exp)
+    }
+    
     public var description: String {
         var significand = self.significand
         
@@ -468,7 +581,7 @@ extension Decimal64: TextOutputStreamable {
             var end = $0
             var start = significand.toString(end: end)
             
-            if (exp < 0) {
+            if exp < 0 {
                 end -= 1
                 
                 // Try to set a decimal point to make exp equal to zero.
@@ -618,121 +731,6 @@ extension Decimal64 {
         }
     }
     
-    /// Creates a decimal number from the given string (if possible).
-    ///
-    /// The input in the format is:
-    ///
-    ///     [`+`|`-`]? `0`..`9`* [`.` `0`..`9`*]? [(`E`|`e`) `0`..`9`*]?
-    ///
-    /// 1. Optional sign.
-    /// 2. Any number of digits as integer part.
-    /// 3. Optional a dot with any number of digits as fraction
-    /// 4. Optional an e with any number of digits as exponent
-    /// - parameter value: The string value to be decoded into a decimal number.
-    public init?(_ value: String) {
-        func isDigit(_ c: Character?) -> Bool { c != nil && c! >= "0" && c! <= "9" }
-        
-        var iterator = value.makeIterator()
-        var c: Character?
-        
-        // Ignore whitespaces.
-        repeat {
-            c = iterator.next()
-        } while c == " "
-        
-        // 1. Check sign
-        let isNegative = c == "-"
-        if isNegative || c == "+" {
-            c = iterator.next()
-        }
-        
-        // Ignore leading zeros.
-        while c != nil && c! == "0" {
-            c = iterator.next()
-        }
-        
-        var man: Int64 = 0
-        var exp: Int = 0
-        var dig: Int = 0
-        
-        // check integer part
-        while isDigit(c) && (dig < 18) {
-            dig += 1
-            man *= 10
-            man += Int64(c!.asciiValue! - 48)
-            c = iterator.next()
-        }
-        
-        // maybe we have more digits for our precision
-        while isDigit(c) {
-            exp += 1
-            c = iterator.next()
-        }
-        
-        // check fraction part
-        if c != nil && c! == "." {
-            c = iterator.next()
-            
-            if man == 0 {
-                while c != nil && c! == "0" {
-                    exp -= 1
-                    c = iterator.next()
-                }
-            }
-            
-            while isDigit(c) && (dig < 18) {
-                dig += 1
-                exp -= 1
-                man *= 10
-                man += Int64(c!.asciiValue! - 48)
-                c = iterator.next()
-            }
-            
-            // maybe we have more digits -> just ignore
-            while isDigit(c) {
-                c = iterator.next()
-            }
-        }
-        
-        if isNegative {
-            man = -man
-        }
-        
-        if (c != nil) && ((c! == "e") || (c! == "E")) {
-            c = iterator.next()
-            dig = 0
-            var e = 0
-            var expSign = 1
-            
-            if (c != nil) && ((c! == "-") || (c! == "+")) {
-                expSign = (c! == "-") ? -1 : 1
-                c = iterator.next()
-            }
-            
-            while c != nil && c! == "0" {
-                c = iterator.next()
-            }
-            
-            while isDigit(c) && (dig < 3) {
-                dig += 1
-                e *= 10
-                e += Int(c!.asciiValue!) - 48
-                c = iterator.next()
-            }
-            
-            exp += e * expSign
-            
-            if isDigit(c) {
-                while isDigit(c) {
-                    c = iterator.next()
-                }
-                return nil
-            }
-        }
-        
-        self.init(man, raisedBy: exp)
-    }
-    
     /// Bit-mask matching the exponent.
     @usableFromInline @_transparent internal static var exponentMask: InternalStorage { .init(bitPattern: 0x1FF) }
     /// Bit-mask matching the sign bit.
@@ -795,15 +793,15 @@ extension Decimal64 {
         let expScale = self.exponent + scale
         
         if expScale < 0 {
-            var man = self.significand
-            let sig = (self._data < 0)
-            
+            let isNegative = self.isNegative
+            var significand = self.significand
+            #warning("Round bug starts here")
             var remainder: Int64 = 0
             var half: Int64 = 5
             if rule != .towardZero {
                 if expScale >= -16  {
-                    remainder = man % Int64.tenToThePower(of: -expScale)
-                } else if man != 0 {
+                    remainder = significand % Int64.tenToThePower(of: -expScale)
+                } else if significand != 0 {
                     remainder = 1
                 }
                 
@@ -813,42 +811,40 @@ extension Decimal64 {
             }
             
             // first round down
-            man.shift(decimalDigits: expScale)
+            significand.shift(decimalDigits: expScale)
             
             switch rule {
             case .toNearestOrAwayFromZero:
                 if remainder >= half {
-                    man &+= 1
+                    significand &+= 1
                 }
             case .toNearestOrEven:
-                if (remainder > half) || ((remainder == half) && ((man & Int64(1)) != 0)) {
-                    man &+= 1
+                if (remainder > half) || ((remainder == half) && ((significand & Int64(1)) != 0)) {
+                    significand &+= 1
                 }
-            case .towardZero: break
+            case .towardZero:
+                break
             case .awayFromZero:
                 if remainder != 0 {
-                    man &+= 1
+                    significand &+= 1
                 }
             case .down:
-                if sig && (remainder != 0) {
-                    man &+= 1
+                if isNegative && (remainder != 0) {
+                    significand &+= 1
                 }
             case .up:
-                if !sig && (remainder != 0) {
-                    man &+= 1
+                if !isNegative && (remainder != 0) {
+                    significand &+= 1
                 }
             @unknown default:
-                fatalError()
+                fatalError("\(Self.self) doesn't yet support \(rule)")
             }
             
-            self._data = man << Self.exponentBitCount
+            self._data = significand << Self.exponentBitCount
             self._data |= Int64(-scale)
-            if sig {
-                self._data = -self._data
-            }
-        } else {
-            //TODO: should work with negative scale
-            fatalError()
+        } else if expScale > 0 {
+            // TODO: should work with negative scale
+            fatalError("\(Self.self) doesn't support negative scales")
         }
     }
     
@@ -876,19 +872,20 @@ extension Decimal64 {
     }
     
     /// The functions break the number into integral and fractional parts.
-    /// After completion, this contains the signed integral part.
     ///
-    /// @retval  Decimal64      The unsigned fractional part of this.
-    public mutating func decompose() -> Decimal64 {
-        var fractionalPart: Decimal64 = self
+    ///
+    ///
+    /// - returns: Tuple containing the _whole_/integral and _decimal_/fractional part.
+    public func decomposed() -> (sign: FloatingPointSign, integral: Decimal64, fractional: Decimal64) {
+        let integral = self.rounded(.towardZero, scale: 0)
+        var fractional = self - integral
+        var sign: FloatingPointSign = .plus
         
-        self.round(.towardZero, scale: 0)
-        fractionalPart -= self
-        
-        if fractionalPart.isNegative {
-            fractionalPart._data.negate()
+        if fractional.isNegative {
+            fractional._data.negate()
+            sign = .minus
         }
-        return fractionalPart
+        return (sign, integral, fractional)
     }
 
     // Keep for rounding functions which may be needed in init
