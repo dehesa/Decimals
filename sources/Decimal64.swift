@@ -24,9 +24,9 @@ public struct Decimal64 {
     
     /// Designated initializer passing the exact bytes for the internal storage.
     /// - attention: This initializer just stores the bytes. It doesn't do any validation.
-    /// - parameter storage: The bytes representing the decimal number.
-    @usableFromInline @_transparent internal init(storage: InternalStorage) {
-        self._data = storage
+    /// - parameter bitPattern: The bytes representing the decimal number.
+    @usableFromInline @_transparent internal init(bitPattern: InternalStorage) {
+        self._data = bitPattern
     }
 }
 
@@ -91,7 +91,7 @@ extension Decimal64: Comparable {
 
 extension Decimal64: AdditiveArithmetic {
     @_transparent public static var zero: Self {
-        .init(storage: 0)
+        .init(bitPattern: 0)
     }
     
     @_transparent public static func + (_ lhs: Self, _ rhs: Self) -> Self {
@@ -130,12 +130,12 @@ extension Decimal64: AdditiveArithmetic {
 extension Decimal64: Numeric {
     @inlinable @_transparent public init?<T>(exactly source: T) where T: BinaryInteger {
         guard source.magnitude < 10_000_000_000_000_000 else { return nil }
-        self.init(storage: Int64(truncatingIfNeeded: source) << Self.exponentBitCount)
+        self.init(bitPattern: Int64(truncatingIfNeeded: source) << Self.exponentBitCount)
     }
     
     @_transparent public var magnitude: Self {
         guard self.isNegative else { return self }
-        return .init(storage: -self._data)
+        return .init(bitPattern: -self._data)
     }
     
     @_transparent public static func * (_ lhs: Self, _ rhs: Self) -> Self {
@@ -200,7 +200,7 @@ extension Decimal64: SignedNumeric {
     }
     
     @_transparent public prefix static func - (operand: Self) -> Self {
-        .init(storage: -operand._data)
+        .init(bitPattern: -operand._data)
     }
 }
 
@@ -217,13 +217,13 @@ extension Decimal64: Strideable {
 extension Decimal64: ExpressibleByIntegerLiteral {
     @_transparent public init(integerLiteral value: Int64) {
         precondition(Swift.abs(value) < 10_000_000_000_000_000)
-        self.init(storage: value << Self.exponentBitCount)
+        self.init(bitPattern: value << Self.exponentBitCount)
     }
 }
 
 extension Decimal64: ExpressibleByFloatLiteral {
     @_transparent public init(floatLiteral value: Double) {
-        self.init(value)! // TODO: Find out a way to pass the literal to decimal number.
+        self.init(value)! // TODO: Figure out an exact conversion.
     }
 }
 
@@ -701,7 +701,7 @@ extension Decimal64 {
     @usableFromInline @_transparent internal init(significand: Significand, exponent: Exponent) {
         // Negative values, negate the exponent.
         let exp = (significand < 0) ? -exponent : exponent
-        self.init(storage: (significand << Self.exponentBitCount) | (InternalStorage(exp) & Self.exponentMask))
+        self.init(bitPattern: (significand << Self.exponentBitCount) | (InternalStorage(exp) & Self.exponentMask))
     }
     
     /// Convenience initializer passing the significand and exponent to be stored internally.
@@ -709,6 +709,11 @@ extension Decimal64 {
     /// The decimal number is represented as follows:
     ///
     ///     number = value * (10 ^ exponent)
+    ///
+    /// For example `10.53` and `-1.7344` can be initialized with the following code:
+    ///
+    ///     let first  = Decimal64(  1053, raisedBy: -2)
+    ///     let second = Decimal64(-17344, raisedBy: -4)
     ///
     /// - parameter value: The number to be multiplied by `10^exponent`.
     /// - parameter exponent: The exponent that `10` will be raised to.
@@ -867,12 +872,12 @@ extension Decimal64 {
     
     /// Shifts to the left `shift` number of decimal digits and reassign the value to the receiving number.
     public static func <<= (_ lhs: inout Decimal64, _ shift: Int) {
-        lhs.setComponents(lhs.significand, lhs.exponent &+ shift, lhs.isNegative)
+        lhs.setComponents(lhs.significand, lhs.exponent &+ shift, false)
     }
     
     /// Shifts to the right `shift` number of decimal digits and reassign the value to the receiving number.
     public static func >>= (_ lhs: inout Decimal64, _ shift: Int) {
-        lhs.setComponents(lhs.significand, lhs.exponent &- shift, lhs.isNegative)
+        lhs.setComponents(lhs.significand, lhs.exponent &- shift, false)
     }
     
     /// Shifts to the left `shift` number of decimal digits.
@@ -891,13 +896,13 @@ extension Decimal64 {
 }
 
 extension Decimal64 {
-    private mutating func setComponents(_ man: Int64, _ exp: Int = 0, _ negative: Bool = false) {
+    private mutating func setComponents(_ man: Int64, _ exp: Int = 0, _ negate: Bool = false) {
         var man = man, exp = exp
-        var negative = negative
+        var negate = negate
 
         if man < 0 {
             man = -man
-            negative = !negative
+            negate = !negate
         }
 
         if man == 0 {
@@ -939,7 +944,7 @@ extension Decimal64 {
         }
 
         // change sign
-        if negative {
+        if negate {
             self._data = -self._data
         }
     }
