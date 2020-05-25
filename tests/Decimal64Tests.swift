@@ -1,4 +1,4 @@
-@testable import Decimals
+import Decimals
 import XCTest
 
 /// Tests decimal number regular cases.

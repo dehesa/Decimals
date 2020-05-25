@@ -1,41 +1,41 @@
 import Foundation
 
-/// Struct to represent decimal floating point 64 bit numbers.
+/// Represents a decimal floating-point 64-bit number with an accuracy of 16 decimal digits.
 ///
-/// This class represents floating point numbers having a 54 bit coefficient, a sign bit and a 9 bit exponent. The coefficient range from bit 0 to 53, the sign bit is bit 54 and the exponent range from bit 55 to 63. The accuracy of this representation is 16 decimal digits.
+/// It uses a sign bit, 54-bit coefficient, and a 9-bit exponent.
 ///
-/// It was designed after ideas from C++ code modelled after the "General Decimal Arithmetic Specification" [Version 1.11 from 2003-02-21](http://www2.hursley.ibm.com/decimal/decarith.pdf) which has moved to a [new site](http://speleotrove.com/decimal/decarith.pdf).
+///      63     55   54 53                                      0
+///     +----------+---+-----------------------------------------+
+///     | exponent | s |               significand               |
+///     +----------+---+-----------------------------------------+
+///
+/// - note: This implementation is designed after ideas from C++ code modelled after the "General Decimal Arithmetic Specification" [Version 1.11 from 2003-02-21](http://www2.hursley.ibm.com/decimal/decarith.pdf) which has moved to a [new site](http://speleotrove.com/decimal/decarith.pdf).
 public struct DecimalFP64 {
     /// The type used to store both the mantissa and the exponent.
     @usableFromInline internal typealias InternalStorage = Int64
     /// Internal storage of 64 bytes composed.
-    @usableFromInline internal private(set) var _data: InternalStorage = 0
+    @usableFromInline internal private(set) var _data: InternalStorage
     
-    public init( _ mantissa: Int64, _ exponent: Int = 0, _ negative: Bool = false) {
-        self.setComponents(mantissa, exponent, negative)
-    }
-    
-    public init(_ mantissa: UInt64, _ exponent: Int = 0, _ negative: Bool = false) {
-        self.setComponents(Int64(mantissa), exponent, negative) // will overflow if greater >Int64.max
+    @_transparent private init(_ significand: Int64, _ exponent: Int = 0, _ negative: Bool = false) {
+        self._data = 0
+        self.setComponents(significand, exponent, negative)
     }
 }
 
-// MARK: -
-
 extension DecimalFP64: Equatable {
     ///  Compare two decimal numbers.
-    /// - parameter left: Number to compare.
-    /// - parameter right: Number to compare.
+    /// - parameter lhs: Number to compare.
+    /// - parameter rhs: Number to compare.
     /// - returns: `true` if both are equal ( A == B ), `false` both differ ( A != B ).
-    public static func == (_ left: Self, _ right: Self) -> Bool {
-        var leftMan = left.getMantissa()
-        var rightMan = right.getMantissa()
+    public static func == (_ lhs: Self, _ rhs: Self) -> Bool {
+        var leftMan = lhs.getMantissa()
+        var rightMan = rhs.getMantissa()
         
         var result = false
         // Same as left.getSign() == right.getSign() but faster.
-        if ((left._data & signMask) == (right._data & signMask)) {
-            var leftExp = left.getExponent()
-            var rightExp = right.getExponent()
+        if ((lhs._data & signMask) == (rhs._data & signMask)) {
+            var leftExp = lhs.getExponent()
+            var rightExp = rhs.getExponent()
             
             if ((leftExp == rightExp) || (leftMan == 0) || (rightMan == 0)) {
                 result = ( leftMan == rightMan );
@@ -68,8 +68,8 @@ extension DecimalFP64: Equatable {
 
 extension DecimalFP64: Comparable {
     ///  Compare two decimal numbers.
-    /// - parameters left: Number to compare.
-    /// - parameters right: Number to compare.
+    /// - parameter lhs: Number to compare.
+    /// - parameter rhs: Number to compare.
     /// - returns: `true`  A is smaller than B ( A < B), `false` if A is bigger or equal to B (A >= B ).
     public static func < (_ lhs: Self, _ rhs: Self) -> Bool {
         var result = false
@@ -319,11 +319,11 @@ extension DecimalFP64: ExpressibleByFloatLiteral {
     }
 }
 
-//extension DecimalFP64: ExpressibleByStringLiteral {
-//    public init(stringLiteral value: StringLiteralType) {
-//        fatalError()
-//    }
-//}
+extension DecimalFP64: ExpressibleByStringLiteral {
+    public init(stringLiteral value: String) {
+        self.init(value)!
+    }
+}
 
 extension DecimalFP64: FloatingPoint {
     public typealias Exponent = Int
@@ -337,11 +337,11 @@ extension DecimalFP64: FloatingPoint {
     }
     
     public init(sign: FloatingPointSign, exponent: Self.Exponent, significand: Self) {
-        self.setComponents(significand.getMantissa(), exponent + significand.getExponent(), sign == .minus )
+        self.init(significand.getMantissa(), exponent + significand.getExponent(), sign == .minus)
     }
     
     public init(signOf: Self, magnitudeOf: Self) {
-        self.setComponents(magnitudeOf.getMantissa(), magnitudeOf.getExponent(), signOf.getSign())
+        self.init(magnitudeOf.getMantissa(), magnitudeOf.getExponent(), signOf.getSign())
     }
     
     public var exponent: Exponent {
@@ -558,9 +558,9 @@ extension DecimalFP64: FloatingPoint {
         return x
     }
     
-    public static func / (_ left: Self, _ right: Self) -> Self {
-        var result = left
-        result /= right
+    public static func / (_ lhs: Self, _ rhs: Self) -> Self {
+        var result = lhs
+        result /= rhs
         return result
     }
     
@@ -569,35 +569,35 @@ extension DecimalFP64: FloatingPoint {
     //      a     1              g          g
     //      - = ---- * ( g*n0 + -- * n1 + ----- * n2 + ... )
     //      b   f0*g            f1        f1*f2
-    public static func /= (_ left: inout Self, _ right: Self) {
-        var myExp = left.getExponent()
-        let rightExp = right.getExponent()
+    public static func /= (_ lhs: inout Self, _ rhs: Self) {
+        var myExp = lhs.getExponent()
+        let rightExp = rhs.getExponent()
         
-        var myMan = left.getMantissa()
-        let otherMan = right.getMantissa()
+        var myMan = lhs.getMantissa()
+        let otherMan = rhs.getMantissa()
         
         // equivalent to ( !isNumber() || !right.isNumber() ) but faster
         if ((myExp > 253) || (rightExp > 253)) {
             if ( ( myExp == 254 ) && ( rightExp <= 254 ) ) {
-                let flipSign = (left.getSign() != right.getSign());
-                left.setInfinity()
+                let flipSign = (lhs.getSign() != rhs.getSign());
+                lhs.setInfinity()
                 
                 if ( flipSign ){
-                    left.minus();
+                    lhs.minus();
                 }
             } else if ( ( myExp <= 253 ) && ( rightExp == 254 ) ) {
-                left._data = 0
+                lhs._data = 0
             } else {
-                left.setNaN();
+                lhs.setNaN();
             }
         } else if ( otherMan == 0 ) {
-            let sign = left.getSign();
-            left.setInfinity()
+            let sign = lhs.getSign();
+            lhs.setInfinity()
             
             if sign {
-                left.minus()
+                lhs.minus()
             }
-        } else if ( myMan != 0 ) && ( right._data != 1 ) {
+        } else if ( myMan != 0 ) && ( rhs._data != 1 ) {
             // Calculate new coefficient
             
             // First approach of result.
@@ -632,12 +632,126 @@ extension DecimalFP64: FloatingPoint {
             // Calculate new exponent.
             myExp -= rightExp + mainShift
             
-            left.setComponents( myMan, myExp, left.getSign() != right.getSign() )
+            lhs.setComponents( myMan, myExp, lhs.getSign() != rhs.getSign() )
         }
     }
 }
 
-extension DecimalFP64: CustomStringConvertible {
+extension DecimalFP64: LosslessStringConvertible, CustomStringConvertible {
+    public init?(_ description: String) {
+        guard !description.isEmpty else { self = .init(0); return }
+        
+        switch description {
+        case "inf":  self = .infinity; return
+        case "-inf": self = -.infinity; return
+        case "nan":  self = .nan; return
+        case "snan": self = .signalingNaN; return
+        default: break
+        }
+        
+        func isDigit(_ c: Character?) -> Bool { c != nil && c! >= "0" && c! <= "9" }
+        
+        var iterator = description.makeIterator()
+        var c: Character?
+        
+        // Ignore whitespaces.
+        repeat {
+            c = iterator.next()
+        } while c == " "
+        
+        // 1. Check sign
+        let isNegative = c == "-"
+        if isNegative || c == "+" {
+            c = iterator.next()
+        }
+        
+        // Ignore leading zeros.
+        while c != nil && c! == "0" {
+            c = iterator.next()
+        }
+        
+        var significand: Int64 = 0
+        var exponent: Int = 0
+        var numDigits: Int = 0
+        
+        // check integer part
+        while isDigit(c) && (numDigits < 18) {
+            numDigits += 1
+            significand *= 10
+            significand += Int64(c!.asciiValue! - 48)
+            c = iterator.next()
+        }
+        
+        // maybe we have more digits for our precision
+        while isDigit(c) {
+            exponent += 1
+            c = iterator.next()
+        }
+        
+        // check fraction part
+        if c != nil && c! == "." {
+            c = iterator.next()
+            
+            if significand == 0 {
+                while c != nil && c! == "0" {
+                    exponent -= 1
+                    c = iterator.next()
+                }
+            }
+            
+            while isDigit(c) && (numDigits < 18) {
+                numDigits += 1
+                exponent -= 1
+                significand *= 10
+                significand += Int64(c!.asciiValue! - 48)
+                c = iterator.next()
+            }
+            
+            // maybe we have more digits -> just ignore
+            while isDigit(c) {
+                c = iterator.next()
+            }
+        }
+        
+        if isNegative {
+            significand = -significand
+        }
+        
+        if (c != nil) && ((c! == "e") || (c! == "E")) {
+            c = iterator.next()
+            numDigits = 0
+            var e = 0
+            var expSign = 1
+            
+            if (c != nil) && ((c! == "-") || (c! == "+")) {
+                expSign = (c! == "-") ? -1 : 1
+                c = iterator.next()
+            }
+            
+            while c != nil && c! == "0" {
+                c = iterator.next()
+            }
+            
+            while isDigit(c) && (numDigits < 3) {
+                numDigits += 1
+                e *= 10
+                e += Int(c!.asciiValue!) - 48
+                c = iterator.next()
+            }
+            
+            exponent += e * expSign
+            
+            if isDigit(c) {
+                while isDigit(c) {
+                    c = iterator.next()
+                }
+                return nil
+            }
+        }
+        
+        self.init(significand, exponent)
+    }
+    
     public var description: String {
         var data: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
                    UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
@@ -831,14 +945,6 @@ extension DecimalFP64 {
         self.init(value, 0)
     }
     
-    public init(_ value: UInt64) {
-        self.init(value, 0)
-    }
-    
-    public init(_ value: UInt) {
-        self.init(value, 0)
-    }
-    
     public init(_ value: Int, _ exponent: Exponent = 0) {
         self.init(Int64(value), exponent)
     }
@@ -848,33 +954,36 @@ extension DecimalFP64 {
     }
     
     public init(_ value: Double) {
-        var isNegative = false
-        var value = value
-        
-        if (value < 0) {
-            isNegative = true
-            value = -value
+        guard value.isFinite else {
+            if value.isInfinite {
+                self = .infinity
+                if case .minus = value.sign { self.setSign(true) }
+            } else if value.isSignalingNaN {
+                self = .signalingNaN
+            } else {
+                self = .nan
+            }
+            return
         }
         
-        let exp = Int( log10( value ) - 15 )
-        let man = Int64( value / pow( 10.0, Self.FloatLiteralType( exp ) ) + 0.5 )
-        
-        self.setComponents( man, exp, isNegative )
+        if value.isZero {
+            self = .zero
+        } else {
+            var (value, isNegative) = (value, false)
+            if (value < 0) {
+                (value, isNegative) = (-value, true)
+            }
+            
+            let exp = Int(log10(value) - 15)
+            let man = Int64(value / pow(10.0, Self.FloatLiteralType(exp)) + 0.5)
+            self.init(man, exp, isNegative)
+        }
     }
     
-    /// Bit-mask matching the exponent.
-    @usableFromInline @_transparent internal static var exponentMask: InternalStorage { .init(bitPattern: 0xFF80000000000000) }
-    /// Bit-mask matching the significand.
-    @_transparent private static var significandMask: InternalStorage { .init(bitPattern: 0x003FFFFFFFFFFFFF) }
-    /// Bit-mask matching the sign.
-    @_transparent private static var signMask: InternalStorage { .init(bitPattern: 0x0040000000000000) }
-    /// Number of coefficient + sign bits.
-    @_transparent private static var exponentShift: InternalStorage { 55 }
-    
     public func negated() -> Self {
-        var left = self
-        left.negate()
-        return left
+        var result = self
+        result.negate()
+        return result
     }
     
     /// Round a decimal number according to the given digits and rounding method.
@@ -948,31 +1057,123 @@ extension DecimalFP64 {
         return self._data == 0x7F80000000000000
     }
     
-    func getSign() -> Bool {
+    /// The result is non-negative
+    mutating func abs() {
+        self._data &= ~Self.signMask
+    }
+    static func abs(_ op: Self) -> Self {
+        var result = op
+        result.abs()
+        return result
+    }
+    
+    /// The functions break the number into integral and fractional parts.
+    ///
+    /// After completion, this contains the signed integral part.
+    /// - returns: The unsigned fractional part of this.
+    mutating func decompose() -> Self {
+        var fracPart = self
+        self.round(0, .towardZero)
+        fracPart -= self
+        fracPart.abs()
+        return fracPart
+    }
+    
+    mutating func minus() {
+        self._data ^= Self.signMask
+    }
+    
+    /// if sometime a high-performance swift is available... maybe a non-throwing swap is necessary.
+    /// - parameter other: the other value that will be exchanged with self.
+    mutating func swap(other: inout Self) {
+        let temp = other
+        other = self
+        self = temp
+    }
+    
+    // TBD which is... methods are necessary
+    func isNegative() -> Bool {
+        (self._data & Self.signMask) == Self.signMask
+    }
+    
+    func isInfinity() -> Bool {
+        self._data & Self.exponentMask == 0x7F00000000000000
+    }
+    
+    /// Assignment decimal shift left
+    /// - parameter shift: Number of decimal digits to shift to the left.
+    /// - Returns:  Receiving number * 10^shift
+    public static func <<= (_ lhs: inout Self, _ shift: Int) {
+        lhs.setComponents(lhs.getMantissa(), lhs.getExponent() + shift, lhs.getSign())
+    }
+    
+    /// Assignment decimal shift right.
+    /// - parameter shift: Number of decimal digits to shift to the right.
+    /// - returns:  Receiving number / 10^shift
+    public static func >>= (_ lhs: inout Self, _ shift: Int ) {
+        lhs.setComponents(lhs.getMantissa(), lhs.getExponent() - shift, lhs.getSign())
+    }
+    
+    public static func <<(_ lhs: Self, _ rhs: Int ) -> Self {
+        var result = lhs
+        result <<= rhs
+        return result
+    }
+    
+    public static func >>(_ lhs: Self, _ rhs: Int) -> Self {
+        var result = lhs
+        result >>= rhs
+        return result
+    }
+}
+
+extension DecimalFP64 {
+    /// Bit-mask matching the exponent.
+    @usableFromInline @_transparent internal static var exponentMask: InternalStorage { .init(bitPattern: 0xFF80000000000000) }
+    /// Bit-mask matching the significand.
+    @_transparent private static var significandMask: InternalStorage { .init(bitPattern: 0x003FFFFFFFFFFFFF) }
+    /// Bit-mask matching the sign.
+    @_transparent private static var signMask: InternalStorage { .init(bitPattern: 0x0040000000000000) }
+    /// Number of coefficient + sign bits.
+    @_transparent private static var exponentShift: InternalStorage { 55 }
+    
+    private func getSign() -> Bool {
         (self._data & Self.signMask) != 0
     }
     
     /// Return the exponent (incl. NaN, Inf)
-    func getExponent() -> Int {
+    private func getExponent() -> Int {
         Int(self._data >> Self.exponentShift)
     }
     
     // Return the positive mantissa
-    func getMantissa() -> Int64 {
+    private func getMantissa() -> Int64 {
         self._data & Self.significandMask
     }
     
-    /// This methods sets the internal represantation according to the
-    /// parameters coefficient, exponent and sign.
-    /// The result is never Not-a-Number(NaN) but can be
-    /// +/- infinity if the exponent is to large or zero if the exponent is
-    /// to small
+    private mutating func setSign(_ negative: Bool) {
+        if negative {
+            self._data |= Self.signMask
+        } else {
+            self._data &= ~Self.signMask
+        }
+    }
+    
+    private mutating func setNaN() {
+        self._data = 0x7F80000000000000
+    } //TODO: keep sign and coefficient
+    
+    private mutating func setInfinity() {
+        self._data = 0x7F3FFFFFFFFFFFFF
+    } // Infinity is greater than any valid number.
+    
+    /// Sets the internal represantation according to the parameters coefficient, exponent and sign.
     ///
-    /// - Parameters:
-    ///   - mantissa: coefficient of result
-    ///   - exponent: exponent of result valid range is -256 to +253
-    ///   - negative: Sign of the result (-0 is valid and distinct from +0 (but compares equal))
-    mutating func setComponents( _ mantissa: Int64, _ exponent: Int = 0, _ negative: Bool = false) {
+    /// The result is never _NaN_ but can be `+`/`-` infinity if the exponent is to large or zero if the exponent is to small
+    /// - parameters mantissa: Coefficient of result.
+    /// - parameters exponent: Exponent of result valid range is -256 to +253.
+    /// - parameters negative: Sign of the result (-0 is valid and distinct from +0 (but compares equal))
+    private mutating func setComponents(_ mantissa: Int64, _ exponent: Int = 0, _ negative: Bool = false) {
         var mantissa = mantissa
         var exponent = exponent
         var negative = negative
@@ -1040,46 +1241,11 @@ extension DecimalFP64 {
         }
     }
     
-    // Arithmetical operations (see GDA specification) they all return *this
-    /// The result is non-negative
-    mutating func abs() {
-        self._data &= ~Self.signMask
-    }
-    static func abs(_ op: Self) -> Self {
-        var result = op
-        result.abs()
-        return result
-    }
-    
-    /// The functions break the number into integral and fractional parts.
-    ///
-    /// After completion, this contains the signed integral part.
-    /// - returns: The unsigned fractional part of this.
-    mutating func decompose() -> Self {
-        var fracPart = self
-        self.round(0, .towardZero)
-        fracPart -= self
-        fracPart.abs()
-        return fracPart
-    }
-    
-    mutating func minus() {
-        self._data ^= Self.signMask
-    }
-    
-    mutating func setSign(_ negative: Bool) {
-        if negative {
-            self._data |= Self.signMask
-        } else {
-            self._data &= ~Self.signMask
-        }
-    }
-    
     ///  Compute the sum of the absolute values of this and a second receiving number.
     ///
     ///  All signs are ignored!
     /// - parameter right: Summand.
-    mutating func addToThis(_ right: Self, _ negative: Bool) {
+    private mutating func addToThis(_ right: Self, _ negative: Bool) {
         var myExp = self.getExponent()
         var otherExp = right.getExponent()
         
@@ -1150,7 +1316,7 @@ extension DecimalFP64 {
     /// The sign is flipped if the result is negative.
     /// - parameter right: Subtrahend.
     /// - parameter negative:flag if ... is negative.
-    mutating func subtractFromThis(_ right: Self, _ negative: Bool) {
+    private mutating func subtractFromThis(_ right: Self, _ negative: Bool) {
         var myExp = self.getExponent();
         var otherExp = right.getExponent();
         
@@ -1218,130 +1384,46 @@ extension DecimalFP64 {
         }
     }
     
-    /// if sometime a high-performance swift is available... maybe a non-throwing swap is necessary.
-    /// - parameter other: the other value that will be exchanged with self.
-    mutating func swap(other: inout Self) {
-        let temp = other
-        other = self
-        self = temp
-    }
-    
-    // TBD which is... methods are necessary
-    func isNegative() -> Bool {
-        (self._data & Self.signMask) == Self.signMask
-    }
-    
-    func isInfinity() -> Bool {
-        self._data & Self.exponentMask == 0x7F00000000000000
-    }
-    
-    mutating func setNaN() {
-        self._data = 0x7F80000000000000
-    } //TODO: keep sign and coefficient
-    
-    mutating func setInfinity() {
-        self._data = 0x7F3FFFFFFFFFFFFF
-    } // Infinity is greater than any valid number.
-    
-    /// Convert type to an signed integer (64bit).
-    /// - parameter limit: The maximum value to be returned, otherwise an exception is thrown.
-    /// - returns: Self as signed integer.
-    func toInt(_ limit: Int64) -> Int64 {
-        var exp = self.getExponent()
-        
-        if ( exp >= -16 ) {
-            var man = self.getMantissa()
-            var shift = 0
-            
-            if exp < 0 {
-                man /= Int64.tenToThePower(of: -exp)
-                exp = 0
-            } else if ((exp > 0) && (exp <= 17)) {
-                shift = man.shiftLeftTo17(limit: exp)
-            }
-            
-            if ((man > limit) || (shift != exp)) {
-                //FIXME: learn exception handling in swift...
-                // throw DecimalFP64::OverflowExceptionParam( 1, *this, ( exp - shift ) )
-                fatalError()
-            }
-            
-            if self.getSign() {
-                return -man
-            } else {
-                return man
-            }
-        }
-        
-        return 0
-    }
-    
-    /// Assignment decimal shift left
-    /// - parameter shift: Number of decimal digits to shift to the left.
-    /// - Returns:  Receiving number * 10^shift
-    public static func <<= (_ left: inout Self, _ shift: Int) {
-        left.setComponents(left.getMantissa(), left.getExponent() + shift, left.getSign())
-    }
-    
-    /// Assignment decimal shift right.
-    /// - parameter shift: Number of decimal digits to shift to the right.
-    /// - returns:  Receiving number / 10^shift
-    public static func >>= (_ left: inout Self, _ shift: Int ) {
-        left.setComponents(left.getMantissa(), left.getExponent() - shift, left.getSign())
-    }
-    
-    public static func <<(_ left: Self, _ right: Int ) -> Self {
-        var result = left
-        result <<= right
-        return result
-    }
-    
-    public static func >>(_ left: Self, _ right: Int) -> Self {
-        var result = left
-        result >>= right
-        return result
-    }
-    
     // possibly not the fastest swift way. but for now the easiest way to port some c++ code
     private func strcpy(_ content: String, to buffer: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8> {
         var pos = buffer
-
+        
         for c in content.utf8 {
             pos.pointee = c
             pos += 1
         }
         return buffer
     }
-
-    func toChar( _ buffer: UnsafeMutablePointer<UInt8> ) -> UnsafeMutablePointer<UInt8> {
-        if self.isNaN { return strcpy("NaN", to: buffer) }
-
+    
+    private func toChar(_ buffer: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8> {
+        if self.isNaN { return strcpy("nan", to: buffer) }
+        
         if self.isInfinity() {
             if self.getSign() {
-                return self.strcpy("-Inf", to: buffer)
+                return self.strcpy("-inf", to: buffer)
             } else {
-                return self.strcpy("Inf", to: buffer)
+                return self.strcpy("inf", to: buffer)
             }
         }
-
+        
         let man = self.getMantissa()
-
+        
         if man == 0 { return self.strcpy("0", to: buffer) }
-
+        
         var exp = self.getExponent()
         var end = buffer.advanced(by: 30)
         var start = man.toString(end: end)
-
+        
         if exp < 0 {
             end -= 1
-
+            
             // Try to set a decimal point to make exp equal to zero.
             // Strip off trailing zeroes.
             while ( end.pointee == 0x30 ) && ( exp < 0 ) {
                 end -= 1
                 exp += 1
             }
-
+            
             if exp < 0 {
                 if exp > start - end - 6 {
                     // Add maximal 6 additional chars left from digits to get
@@ -1352,7 +1434,7 @@ extension DecimalFP64 {
                         start.pointee = 0x30 // 0
                     }
                 }
-
+                
                 let dotPos = ( end - start ) + exp + 1;
                 // exp < 0 therefore start + dotPos <= end.
                 if dotPos > 0 {
@@ -1367,14 +1449,14 @@ extension DecimalFP64 {
                         start.pointee = 0x2E // .
                         start -= 1
                     }
-
+                    
                     exp = 1 - dotPos
-
+                    
                     end += 1
                     end.pointee = 0x45 // E
                     end += 1
                     end.pointee = 0x2D // -
-
+                    
                     end += 2
                     if exp >= 10 {
                         end += 1
@@ -1387,16 +1469,15 @@ extension DecimalFP64 {
             } else {
                 end += 1
             }
-        }
-        else if exp + end - start > 16 {
+        } else if exp + end - start > 16 {
             end -= 1
-
+            
             exp += end - start //TODO: will it work on 64bit?
-
+            
             while  end.pointee == 0x30 { // 0
                 end -= 1
             }
-
+            
             if end != start {
                 let startMinusOne = start.advanced(by: -1)
                 startMinusOne.pointee = start.pointee
@@ -1407,7 +1488,7 @@ extension DecimalFP64 {
             end.pointee = 0x45 // E
             end += 1
             end.pointee = 0x2B // +
-
+            
             end += 2
             if exp >= 10 {
                 end += 1
@@ -1424,14 +1505,14 @@ extension DecimalFP64 {
                 exp -= 1
             }
         }
-
+        
         if self.getSign() {
             start -= 1
             start.pointee = 0x2D // -
         }
-
+        
         end.pointee = 0
-
+        
         return start
     }
 }

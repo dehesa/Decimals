@@ -4,7 +4,7 @@ import Foundation
 ///
 /// It uses 55 bits for the significand and 9 bits for exponent (both are two's complement).
 ///
-///     63                                          9 8            0
+///      63                                         9 8         0
 ///     +--------------------------------------------+-----------+
 ///     |                significand                 |  exponent |
 ///     +--------------------------------------------+-----------+
@@ -20,7 +20,7 @@ public struct Decimal64 {
     /// The type used to store both the mantissa and the exponent.
     @usableFromInline internal typealias InternalStorage = Int64
     /// Internal storage of 64 bytes composed of 55 bit for a significand and 9 bits for the exponent.
-    @usableFromInline internal private(set) var _data: InternalStorage = 0
+    @usableFromInline internal private(set) var _data: InternalStorage
     
     /// Designated initializer passing the exact bytes for the internal storage.
     /// - attention: This initializer just stores the bytes. It doesn't do any validation.
@@ -29,8 +29,6 @@ public struct Decimal64 {
         self._data = storage
     }
 }
-
-// MARK: -
 
 extension Decimal64: Equatable {
     public static func == (_ lhs: Self, _ rhs: Self) -> Bool {
@@ -356,21 +354,21 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
             c = iterator.next()
         }
         
-        var man: Int64 = 0
-        var exp: Int = 0
-        var dig: Int = 0
+        var significand: Int64 = 0
+        var exponent: Int = 0
+        var numDigits: Int = 0
         
         // check integer part
-        while isDigit(c) && (dig < 18) {
-            dig += 1
-            man *= 10
-            man += Int64(c!.asciiValue! - 48)
+        while isDigit(c) && (numDigits < 18) {
+            numDigits += 1
+            significand *= 10
+            significand += Int64(c!.asciiValue! - 48)
             c = iterator.next()
         }
         
         // maybe we have more digits for our precision
         while isDigit(c) {
-            exp += 1
+            exponent += 1
             c = iterator.next()
         }
         
@@ -378,18 +376,18 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
         if c != nil && c! == "." {
             c = iterator.next()
             
-            if man == 0 {
+            if significand == 0 {
                 while c != nil && c! == "0" {
-                    exp -= 1
+                    exponent -= 1
                     c = iterator.next()
                 }
             }
             
-            while isDigit(c) && (dig < 18) {
-                dig += 1
-                exp -= 1
-                man *= 10
-                man += Int64(c!.asciiValue! - 48)
+            while isDigit(c) && (numDigits < 18) {
+                numDigits += 1
+                exponent -= 1
+                significand *= 10
+                significand += Int64(c!.asciiValue! - 48)
                 c = iterator.next()
             }
             
@@ -400,12 +398,12 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
         }
         
         if isNegative {
-            man = -man
+            significand = -significand
         }
         
         if (c != nil) && ((c! == "e") || (c! == "E")) {
             c = iterator.next()
-            dig = 0
+            numDigits = 0
             var e = 0
             var expSign = 1
             
@@ -418,14 +416,14 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
                 c = iterator.next()
             }
             
-            while isDigit(c) && (dig < 3) {
-                dig += 1
+            while isDigit(c) && (numDigits < 3) {
+                numDigits += 1
                 e *= 10
                 e += Int(c!.asciiValue!) - 48
                 c = iterator.next()
             }
             
-            exp += e * expSign
+            exponent += e * expSign
             
             if isDigit(c) {
                 while isDigit(c) {
@@ -435,7 +433,7 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
             }
         }
         
-        self.init(man, raisedBy: exp)
+        self.init(significand, raisedBy: exponent)
     }
     
     public var description: String {
@@ -866,7 +864,33 @@ extension Decimal64 {
         }
         return (integral, fractional)
     }
+    
+    /// Shifts to the left `shift` number of decimal digits and reassign the value to the receiving number.
+    public static func <<= (_ lhs: inout Decimal64, _ shift: Int) {
+        lhs.setComponents(lhs.significand, lhs.exponent &+ shift, lhs.isNegative)
+    }
+    
+    /// Shifts to the right `shift` number of decimal digits and reassign the value to the receiving number.
+    public static func >>= (_ lhs: inout Decimal64, _ shift: Int) {
+        lhs.setComponents(lhs.significand, lhs.exponent &- shift, lhs.isNegative)
+    }
+    
+    /// Shifts to the left `shift` number of decimal digits.
+    @_transparent public static func << (_ lhs: Decimal64, _ rhs: Int) -> Decimal64 {
+        var result = lhs
+        result <<= rhs
+        return result
+    }
+    
+    /// Shifts to the right `shift` number of decimal digits.
+    @_transparent public static func >> (_ lhs: Decimal64, _ rhs: Int) -> Decimal64 {
+        var result = lhs
+        result >>= rhs
+        return result
+    }
+}
 
+extension Decimal64 {
     private mutating func setComponents(_ man: Int64, _ exp: Int = 0, _ negative: Bool = false) {
         var man = man, exp = exp
         var negative = negative
@@ -1044,29 +1068,5 @@ extension Decimal64 {
         } else {
             // Nothing to do because NumB is too small (myExp > otherExp + 32).
         }
-    }
-    
-    /// Shifts to the left `shift` number of decimal digits and reassign the value to the receiving number.
-    public static func <<= (_ lhs: inout Decimal64, _ shift: Int) {
-        lhs.setComponents(lhs.significand, lhs.exponent &+ shift, lhs.isNegative)
-    }
-    
-    /// Shifts to the right `shift` number of decimal digits and reassign the value to the receiving number.
-    public static func >>= (_ lhs: inout Decimal64, _ shift: Int) {
-        lhs.setComponents(lhs.significand, lhs.exponent &- shift, lhs.isNegative)
-    }
-    
-    /// Shifts to the left `shift` number of decimal digits.
-    @_transparent public static func << (_ lhs: Decimal64, _ rhs: Int) -> Decimal64 {
-        var result = lhs
-        result <<= rhs
-        return result
-    }
-    
-    /// Shifts to the right `shift` number of decimal digits.
-    @_transparent public static func >> (_ lhs: Decimal64, _ rhs: Int) -> Decimal64 {
-        var result = lhs
-        result >>= rhs
-        return result
     }
 }
