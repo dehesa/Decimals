@@ -84,8 +84,8 @@ extension Decimal64: Comparable {
         !(lhs < rhs)
     }
     
-    @_transparent public static func <= (_ left: Self, _ right: Self) -> Bool {
-        !(right < left)
+    @_transparent public static func <= (_ lhs: Self, _ rhs: Self) -> Bool {
+        !(rhs < lhs)
     }
 }
 
@@ -135,7 +135,7 @@ extension Decimal64: Numeric {
     
     @_transparent public var magnitude: Self {
         guard self.isNegative else { return self }
-        return .init(bitPattern: -self._data)
+        return .init(significand: -self.significand, exponent: self.exponent)
     }
     
     @_transparent public static func * (_ lhs: Self, _ rhs: Self) -> Self {
@@ -144,63 +144,60 @@ extension Decimal64: Numeric {
         return result
     }
     
-    public static func *= (_ left: inout Self, _ right: Self) {
-        var myExp = left.exponent
-        let rightExp = right.exponent
+    public static func *= (_ lhs: inout Self, _ rhs: Self) {
+        guard !lhs.isZero && !rhs.isZero else { lhs = .zero; return }
         
-        if (right._data == 0 || left._data == 0) {
-            left._data = 0
-        } else {
-            // Calculate new coefficient
-            var myHigh = left.significand
-            let myLow  = myHigh % Int64.powerOf10.8
-            myHigh /= Int64.powerOf10.8
+        // Calculate new coefficient.
+        var myHigh = lhs.significand
+        let myLow  = myHigh % Int64.powerOf10.8
+        myHigh /= Int64.powerOf10.8
+        
+        var otherHigh = rhs.significand
+        let otherLow  = otherHigh % Int64.powerOf10.8
+        otherHigh /= Int64.powerOf10.8
+        
+        var newHigh = myHigh &* otherHigh
+        var newMid  = myHigh &* otherLow &+ myLow &* otherHigh
+        var significand = myLow &* otherLow
+        
+        var shift = 0
+        
+        if (newHigh > 0) {
+            // Make high as big as possible.
+            shift = 16 &- newHigh.shiftLeftTo17Limit16()
             
-            var otherHigh = right.significand
-            let otherLow  = otherHigh % Int64.powerOf10.8
-            otherHigh /= Int64.powerOf10.8
-            
-            var newHigh = myHigh &* otherHigh
-            var newMid  = myHigh &* otherLow &+ myLow &* otherHigh
-            var myMan = myLow &* otherLow
-            
-            var shift = 0
-            
-            if (newHigh > 0) {
-                // Make high as big as possible.
-                shift = 16 &- newHigh.shiftLeftTo17Limit16()
-                
-                if (shift > 8) {
-                    newMid /= Int64.tenToThePower(of: shift - 8)
-                    myMan /= Int64.tenToThePower(of: shift)
-                } else {
-                    newMid &*= Int64.tenToThePower(of: 8 - shift)
-                    myMan /= Int64.tenToThePower(of: shift)
-                }
-                
-                myMan += newHigh &+ newMid
-            } else if newMid > 0 {
-                // Make mid as big as possible.
-                shift = 8 &- newMid.shiftLeftTo17Limit8()
-                myMan /= Int64.tenToThePower(of: shift)
-                myMan &+= newMid
+            if (shift > 8) {
+                newMid /= Int64.tenToThePower(of: shift - 8)
+                significand /= Int64.tenToThePower(of: shift)
+            } else {
+                newMid &*= Int64.tenToThePower(of: 8 - shift)
+                significand /= Int64.tenToThePower(of: shift)
             }
             
-            // Calculate new exponent.
-            myExp &+= rightExp &+ shift;
-            
-            left.setComponents(myMan, myExp, left.isNegative != right.isNegative)
+            significand += newHigh &+ newMid
+        } else if newMid > 0 {
+            // Make mid as big as possible.
+            shift = 8 &- newMid.shiftLeftTo17Limit8()
+            significand /= Int64.tenToThePower(of: shift)
+            significand &+= newMid
         }
+        
+        // Calculate new exponent.
+        let exponent = lhs.exponent &+ (rhs.exponent &+ shift)
+        
+        #warning("I commented setComponents")
+//        lhs.setComponents(significand, exponent, lhs.isNegative != rhs.isNegative)
+        lhs = .init(significand: significand, exponent: exponent)
     }
 }
 
 extension Decimal64: SignedNumeric {
     @_transparent public mutating func negate() {
-        self._data = -self._data
+        self = .init(significand: -self.significand, exponent: self.exponent)
     }
     
     @_transparent public prefix static func - (operand: Self) -> Self {
-        .init(bitPattern: -operand._data)
+        .init(significand: -operand.significand, exponent: operand.exponent)
     }
 }
 
@@ -234,11 +231,8 @@ extension Decimal64: ExpressibleByStringLiteral {
 }
 
 extension Decimal64 /*: FloatingPoint*/ {
-    /// A type that can represent any written exponent.
-    public typealias Exponent = Int
-    
     @_transparent public var isZero: Bool {
-        self._data == 0
+        self.significand == 0
     }
     
     @_transparent public var sign: FloatingPointSign {
@@ -433,7 +427,7 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
             }
         }
         
-        self.init(significand, raisedBy: exponent)
+        self.init(significand, power: exponent)
     }
     
     public var description: String {
@@ -692,6 +686,8 @@ extension Decimal64: TextOutputStreamable {
 extension Decimal64 {
     /// A type that represents the encoded significand of a value.
     public typealias Significand = Int64
+    /// A type that can represent any written exponent.
+    public typealias Exponent = Int
     
     /// Convenience initializer passing the significand and exponent to be stored internally.
     /// - attention: This initializer just stores the bytes. It doesn't do any validation.
@@ -699,9 +695,7 @@ extension Decimal64 {
     /// - parameter exponent: The exponent that `10` will be raised to.
     /// - returns: A decimal number returned by the formula: `number = significand * (10 ^ exponent)`.
     @usableFromInline @_transparent internal init(significand: Significand, exponent: Exponent) {
-        // Negative values, negate the exponent.
-        let exp = (significand < 0) ? -exponent : exponent
-        self.init(bitPattern: (significand << Self.exponentBitCount) | (InternalStorage(exp) & Self.exponentMask))
+        self.init(bitPattern: (significand << Self.exponentBitCount) | (InternalStorage(exponent) & Self.exponentMask))
     }
     
     /// Convenience initializer passing the significand and exponent to be stored internally.
@@ -712,13 +706,13 @@ extension Decimal64 {
     ///
     /// For example `10.53` and `-1.7344` can be initialized with the following code:
     ///
-    ///     let first  = Decimal64(  1053, raisedBy: -2)
-    ///     let second = Decimal64(-17344, raisedBy: -4)
+    ///     let first  = Decimal64(  1053, power: -2)
+    ///     let second = Decimal64(-17344, power: -4)
     ///
     /// - parameter value: The number to be multiplied by `10^exponent`.
     /// - parameter exponent: The exponent that `10` will be raised to.
     /// - returns: A decimal number or `nil` if the given `exponent` and significand represent a number with more than 16 decimal digits.
-    public init?(_ value: Significand, raisedBy exponent: Exponent) {
+    public init?(_ value: Significand, power exponent: Exponent) {
         guard Swift.abs(value) < 10_000_000_000_000_000, (exponent >= Self.leastExponent) && (exponent <= Self.greatestExponent) else { return nil }
         self.init(significand: value, exponent: exponent)
     }
@@ -733,31 +727,34 @@ extension Decimal64 {
             let exp = Int(log10(val) - 15)
             let man = Int64(val / pow(10.0, Double(exp)) + 0.5)
             let significand: Significand = (value < 0) ? -man: man
-            self.init(significand, raisedBy: exp)
+            self.init(significand, power: exp)
         }
     }
     
     /// The number of bits used to represent the type’s exponent.
-    @_transparent public static var exponentBitCount: Int { 9 }
+    @_transparent public static var exponentBitCount: Int {
+        9
+    }
     /// The available number of fractional significand bits.
-    @_transparent public static var significandBitCount: Int { 55 }
-    
+    @_transparent public static var significandBitCount: Int {
+        55
+    }
     /// The maximum exponent. The formula is: `(2 ^ exponentBitCount) / 2 - 1`.
-    @_transparent private static var greatestExponent: Int { 255 }
+    @_transparent private static var greatestExponent: Int {
+        255
+    }
     /// The minimum exponent. The formula is: `-(2 ^ exponentBitCount) / 2`
-    @_transparent private static var leastExponent: Int { -256 }
-    
+    @_transparent private static var leastExponent: Int {
+        -256
+    }
     /// Bit-mask matching the exponent.
-    @usableFromInline @_transparent internal static var exponentMask: InternalStorage { .init(bitPattern: 0x1FF) }
-    /// Bit-mask matching the sign bit.
-    @_transparent private static var signMask: InternalStorage { .init(bitPattern: 0x8000000000000000) }
+    @usableFromInline @_transparent internal static var exponentMask: InternalStorage {
+        .init(bitPattern: 0b1_1111_1111)
+    }
     
     /// The exponent of the floating-point value.
     @_transparent public var exponent: Exponent {
-        // If the significand is negative, the exponent has been previously negated.
-        let absolute = self.isNegative ? -self._data : self._data
-        // The left-shift right-shift sequence restores the sign of the exponent.
-        return .init( ((absolute & Self.exponentMask) << Self.significandBitCount) >> Self.significandBitCount )
+        .init((self._data << Self.significandBitCount) >> Self.significandBitCount)
     }
     
     @_transparent public static var tau: Self {
@@ -851,7 +848,7 @@ extension Decimal64 {
     public func normalized() -> Self {
         var significand = self.significand
         guard significand != 0 else { return Self.zero }
-        
+        #warning("Is this working?")
         var exponent = self.exponent
         exponent -= significand.toMaximumDigits()
         return .init(significand: significand, exponent: exponent)
@@ -897,8 +894,7 @@ extension Decimal64 {
 
 extension Decimal64 {
     private mutating func setComponents(_ man: Int64, _ exp: Int = 0, _ negate: Bool = false) {
-        var man = man, exp = exp
-        var negate = negate
+        var man = man, exp = exp, negate = negate
 
         if man < 0 {
             man = -man
