@@ -4,7 +4,7 @@ import XCTest
 /// Tests decimal number regular cases.
 final class Decimal64Test: XCTestCase {
     override func setUp() {
-        self.continueAfterFailure = false
+        self.continueAfterFailure = true
     }
 }
 
@@ -68,6 +68,7 @@ extension Decimal64Test {
         XCTAssertEqual(leftTau, rightTau)
     }
     
+    /// Tests the _less-than_ operator.
     func testComparable() {
         let left:  [Decimal64] = ["-3.333", "-1",  "-0.5", "-0.1", "0", "0.1", "0.5", "1", "3.333"]
         let right: [Decimal64] = ["+3.333", "-1", "-0.51",    "0", "0",  "-7", "789", "1", "3.3333"]
@@ -75,8 +76,35 @@ extension Decimal64Test {
         XCTAssertEqual(zip(left, right).map { $0 < $1 }, lessComparison)
     }
     
+    /// Tests the `AdditiveArithmetic` protocol conformance.
+    func testAdditiveArithmetic() {
+        let input: [Decimal64] = [-.pi, "-10", "-3.14", .zero, "10", .tau]
+        XCTAssertEqual(input.map { $0 + 2 }, ["-1.141592653589793", -8, "-1.14", 2, 12, "8.283185307179586"] as [Decimal64])
+        XCTAssertEqual(input.map { $0 - 2 }, ["-5.141592653589793", -12, "-5.14", -2, 8, "4.283185307179586"] as [Decimal64])
+        XCTAssertEqual(input.map { $0 + $0 }, ["-6.283185307179586", -20, "-6.28", 0, 20, "12.56637061435917"] as [Decimal64])
+        XCTAssertEqual(input.map { $0 - $0 }, input.map { _ in .zero })
+    }
+    
+    /// Tests the multiplication operator.
+    func testMultiplication() {
+        let left:  [Decimal64] = ["-3.333",     "-1",  "-0.5", "-0.1", 0,  "0.1",   "0.5", 1,     "3.333", .pi]
+        let right: [Decimal64] = ["+3.333",     "-1", "-0.51",      0, 0,   "-7",   "789", 1,    "3.3333",  -2]
+        let result: [Decimal64] = ["-11.108889", "1", "0.255",      0, 0, "-0.7", "394.5", 1, "11.1098889", "6.283185307179586"]
+        XCTAssertEqual(zip(left, right).map { $0 * $1 }, result)
+    }
+    
+    /// Tests the division operator.
+    func testDivision() {
+//        let left:  [Decimal64] = ["-3.333",     "-1",  "-0.5", "-0.1",  "0.1",   "0.5", 1,     "3.333", .pi]
+//        print(left.map { $0 / $0 })
+        
+        let n: Decimal64 = "-3.333"
+        let d: Decimal64 = "1"
+        print(n / d)
+    }
+    
     /// Tests the negation operator.
-    func testNegate() {
+    func testNegation() {
         let inputStrings: [String] = [(-Decimal64.pi).description, "-3.333", "-1", "-0.5", "-0.1", "0", "0.1", "0.5", "1", "3.333", Decimal64.tau.description]
         let outputStrings: [String] = inputStrings.map {
             var result = $0
@@ -95,24 +123,20 @@ extension Decimal64Test {
         XCTAssertEqual(output.map { $0.description }, outputStrings)
         
         XCTAssertEqual(input.map { -$0 }, output)
-//        XCTAssertEqual(input.map { $0 * -1 }, output)
-    }
-    
-    func testSum() {
-        let left: [Decimal64] = [-.pi, "-10", "-3.14", .zero, "10"]
-        print(left)
-        print(left.map { $0 + 2 })
+        XCTAssertEqual(input.map { $0 * -1 }, output)
     }
     
     /// Tests the decimal shifting operators.
     func testDecimalShifting() {
         let numbers: [Decimal64] = [.pi, -.tau, .zero, "-10", "10"]
-        print(numbers)
-        print(numbers.map { $0 >> 3 })
+        
+        let rightResult: [Decimal64] = ["0.00003141592653589793", "-0.00006283185307179586", 0, "-0.0001", "0.0001"]
+        XCTAssertEqual(numbers.map { $0 >> 5 }, rightResult)
+        
+        let leftResult: [Decimal64] = ["3141.592653589793", "-6283.185307179586", 0, -10000, 10000]
+        XCTAssertEqual(numbers.map { $0 << 3 }, leftResult)
     }
-}
 
-extension Decimal64Test {
     /// Tests the comparable functions.
     func testSorting() {
         let doubles = (0..<1_000).map { _ in ceil(Double.random(in: -1000...1000) * 10_000) / 10_000 }

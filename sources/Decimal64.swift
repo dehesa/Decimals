@@ -127,32 +127,114 @@ extension Decimal64: AdditiveArithmetic {
         .init(bitPattern: .zero)
     }
     
-    @_transparent public static func + (_ lhs: Self, _ rhs: Self) -> Self {
-        var result = lhs
-        result += rhs
-        return result
+    public static func + (_ lhs: Self, _ rhs: Self) -> Self {
+        var rightSignificand = rhs.significand
+        // If the right significand is 0, there is nothing to do.
+        guard rightSignificand != .zero else { return lhs }
+        
+        var (leftExponent, rightExponent) = (lhs.exponent, rhs.exponent)
+        var leftSignificand = lhs.significand
+        
+        // If exponents are the same, just add the significands.
+        if leftExponent == rightExponent {
+            return .init(roundingSignificand: leftSignificand &+ rightSignificand, exponent: leftExponent)
+        // If the left decimal number is too small, only the right number matters.
+        } else if (leftSignificand == .zero) || (leftExponent < rightExponent &- 32) {
+            return rhs
+        // If (leftExponent - rightExponent) ∈ [-32, 32], then the numbers can be added.
+        } else if leftExponent <= rightExponent &+ 32 {
+            // If `rightExponent` is bigger than `leftExponent`, make `rightExponent` smaller.
+            if leftExponent < rightExponent {
+                rightExponent &-= rightSignificand.shiftLeftTo17(limit: min(17, rightExponent &- leftExponent))
+                // If after the shift, the exponents are still not the same...
+                if leftExponent != rightExponent {
+                    // ...and the `rightExponent` is much bigger than the `leftExponent`, ignore the left number.
+                    if rightExponent > leftExponent &+ 16 {
+                        return rhs
+                    // ..`leftExponent` is still smaller than `rightExponent`, make it bigger.
+                    } else {
+                        leftSignificand /= Int64.tenToThePower(of: rightExponent &- leftExponent)
+                        leftExponent = rightExponent
+                    }
+                }
+            // If `leftExponent` is bigger than `rightExponent`, make `leftExponent` smaller.
+            } else {
+                leftExponent &-= leftSignificand.shiftLeftTo17(limit: min(17, leftExponent &- rightExponent))
+                // If after the shift, the exponents are still not the same...
+                if leftExponent != rightExponent {
+                    // ..and the `leftExponent` is much bigger than the `rightExponent`, ignore the right number.
+                    if leftExponent > rightExponent &+ 16 {
+                        return lhs
+                    // ..`rightExponent` is still smaller than `leftExponent`, make it bigger.
+                    } else {
+                        rightSignificand /= Int64.tenToThePower(of: leftExponent &- rightExponent)
+                    }
+                }
+            }
+            // Now both exponents are equal.
+            return .init(roundingSignificand: leftSignificand &+ rightSignificand, exponent: leftExponent)
+        // If the right number is too small, only the left number matters.
+        } else { return lhs }
     }
     
-    @_transparent public static func - (_ lhs: Self, _ rhs: Self) -> Self {
-        var result = lhs
-        result -= rhs
-        return result
+    public static func - (_ lhs: Self, _ rhs: Self) -> Self {
+        var rightSignificand = rhs.significand
+        // If the right significand is 0, there is nothing to do.
+        guard rightSignificand != .zero else { return lhs }
+        
+        var (leftExponent, rightExponent) = (lhs.exponent, rhs.exponent)
+        var leftSignificand = lhs.significand
+        
+        // If exponents are the same, just remove the right significand from the left significand.
+        if leftExponent == rightExponent {
+            return .init(roundingSignificand: leftSignificand &- rightSignificand, exponent: leftExponent)
+        // If the left decimal number is too small, only the right number matters.
+        } else if (leftSignificand == .zero) || (leftExponent < rightExponent &- 32) {
+            return .init(unsafeSignificand: -rightSignificand, exponent: rightExponent)
+        // If (leftExponent - rightExponent) ∈ [-32, 32], then the numbers can be subtracted.
+        } else if leftExponent <= rightExponent &+ 32 {
+            // If `rightExponent` is bigger than `leftExponent`, make `rightExponent` smaller.
+            if leftExponent < rightExponent {
+                rightExponent &-= rightSignificand.shiftLeftTo17(limit: min(17, rightExponent &- leftExponent));
+                // If after the shift, the exponents are still not the same...
+                if leftExponent != rightExponent {
+                    // ...and the `rightExponent` is much bigger than the `leftExponent`, ignore the left number.
+                    if rightExponent > leftExponent &+ 16 {
+                        // This is too small, therefore difference is completely -sign * |NumB|.
+                        return .init(unsafeSignificand: -rightSignificand, exponent: rightExponent)
+                    // ..`leftExponent` is still smaller than `rightExponent`, make it bigger.
+                    } else {
+                        leftSignificand /= Int64.tenToThePower(of: rightExponent &- leftExponent)
+                        leftExponent = rightExponent
+                    }
+                }
+            // If `leftExponent` is bigger than `rightExponent`, make `leftExponent` smaller.
+            } else {
+                leftExponent &-= leftSignificand.shiftLeftTo17(limit: min(17, leftExponent &- rightExponent))
+                // If after the shift, the exponents are still not the same...
+                if leftExponent != rightExponent {
+                    // ..and the `leftExponent` is much bigger than the `rightExponent`, ignore the right number.
+                    if leftExponent > rightExponent + 16 {
+                        return lhs
+                    // ..`rightExponent` is still smaller than `leftExponent`, make it bigger.
+                    } else {
+                        rightSignificand /= Int64.tenToThePower(of: leftExponent &- rightExponent)
+                    }
+                }
+            }
+            
+            // Now both exponents are equal.
+            return .init(roundingSignificand: leftSignificand &- rightSignificand, exponent: leftExponent)
+        // If the right number is too small, only the left number matters.
+        } else { return lhs }
     }
     
-    public static func += (_ lhs: inout Self, _ rhs: Self) {
-        if lhs.isNegative == rhs.isNegative {
-            lhs.add(rhs)
-        } else {
-            lhs.subtract(rhs)
-        }
+    @_transparent public static func += (_ lhs: inout Self, _ rhs: Self) {
+        lhs = lhs + rhs
     }
 
-    public static func -= (_ lsh: inout Self, _ rhs: Self) {
-        if lsh.isNegative == rhs.isNegative {
-            lsh.subtract(rhs)
-        } else {
-            lsh.add(rhs);
-        }
+    @_transparent public static func -= (_ lhs: inout Self, _ rhs: Self) {
+        lhs = lhs - rhs
     }
 }
 
@@ -167,54 +249,46 @@ extension Decimal64: Numeric {
         return .init(unsafeSignificand: -self.significand, exponent: self.exponent)
     }
     
-    @_transparent public static func * (_ lhs: Self, _ rhs: Self) -> Self {
-        var result = lhs
-        result *= rhs
-        return result
-    }
-    
-    public static func *= (_ lhs: inout Self, _ rhs: Self) {
-        guard !lhs.isZero && !rhs.isZero else { lhs = .zero; return }
+    public static func * (_ lhs: Self, _ rhs: Self) -> Self {
+        var (leftHigh, rightHigh) = (lhs.significand, rhs.significand)
+        if (leftHigh == .zero) || (rightHigh == .zero) { return .zero }
         
-        // Calculate new coefficient.
-        var myHigh = lhs.significand
-        let myLow  = myHigh % Int64.powerOf10.8
-        myHigh /= Int64.powerOf10.8
+        let (leftLow, rightLow) = (leftHigh % Int64.powerOf10.8, rightHigh % Int64.powerOf10.8)
+        leftHigh /= Int64.powerOf10.8
+        rightHigh /= Int64.powerOf10.8
         
-        var otherHigh = rhs.significand
-        let otherLow  = otherHigh % Int64.powerOf10.8
-        otherHigh /= Int64.powerOf10.8
+        var (high, mid) = (leftHigh * rightHigh, leftHigh * rightLow + leftLow * rightHigh)
+        var significand = leftLow * rightLow
+        let shift: Int
         
-        var newHigh = myHigh &* otherHigh
-        var newMid  = myHigh &* otherLow &+ myLow &* otherHigh
-        var significand = myLow &* otherLow
-        
-        var shift = 0
-        
-        if (newHigh > 0) {
+        if high > 0 {
             // Make high as big as possible.
-            shift = 16 &- newHigh.shiftLeftTo17Limit16()
+            shift = 16 - high.shiftLeftTo17Limit16()
             
             if (shift > 8) {
-                newMid /= Int64.tenToThePower(of: shift - 8)
+                mid /= Int64.tenToThePower(of: shift - 8)
                 significand /= Int64.tenToThePower(of: shift)
             } else {
-                newMid &*= Int64.tenToThePower(of: 8 - shift)
+                mid *= Int64.tenToThePower(of: 8 - shift)
                 significand /= Int64.tenToThePower(of: shift)
             }
             
-            significand += newHigh &+ newMid
-        } else if newMid > 0 {
+            significand += high + mid
+        } else if mid > 0 {
             // Make mid as big as possible.
-            shift = 8 &- newMid.shiftLeftTo17Limit8()
+            shift = 8 - mid.shiftLeftTo17Limit8()
             significand /= Int64.tenToThePower(of: shift)
-            significand &+= newMid
+            significand += mid
+        } else {
+            shift = 0
         }
         
-        // Calculate new exponent.
-        let exponent = lhs.exponent &+ (rhs.exponent &+ shift)
-        
-        lhs.setComponents(significand, exponent, lhs.isNegative != rhs.isNegative)
+        let exponent = lhs.exponent + (rhs.exponent &+ shift)
+        return .init(roundingSignificand: significand, exponent: exponent)
+    }
+    
+    @_transparent public static func *= (_ lhs: inout Self, _ rhs: Self) {
+        lhs = lhs * rhs
     }
 }
 
@@ -279,68 +353,57 @@ extension Decimal64 /*: FloatingPoint*/ {
     }
     
     @_transparent public var isZero: Bool {
-        self.significand == 0
+        self.significand == .zero
     }
     
     @_transparent public var sign: FloatingPointSign {
         (self.isNegative) ? .minus : .plus
     }
     
-    @_transparent public static func / (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
-        var result = lhs
-        result /= rhs
-        return result
-    }
-    
     // It uses the following algorithm: `a = r0, f0*r0 = n0*b + r1, f1*r1 = n1*b + r2, ...` where `fi` are factors (power of 10) to make remainders `ri` as big as possible and `ni` are integers. Then with g a power of 10 to make `n0` as big as possible:
     //     a     1              g          g
     //     - = ---- * ( g*n0 + -- * n1 + ----- * n2 + ... )
     //     b   f0*g            f1        f1*f2
-    public static func /= (_ lhs: inout Self, _ rhs: Self) {
-        var myExp = lhs.exponent
-        let rightExp = rhs.exponent
+    //
+    public static func / (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
+        let rightSignificand = rhs.significand
+        guard rightSignificand != 0 else { fatalError() }
         
-        var myMan = lhs.significand
-        let otherMan = rhs.significand
+        var significand = lhs.significand
+        let (leftExponent, rightExponent) = (lhs.exponent, rhs.exponent)
         
-        if otherMan == 0 {
-            // TODO: Look out
-            fatalError()
-        } else if (myMan != 0) && (rhs._data != 1) {
-            // Calculate new coefficient
-            
-            // First approach of result. Make numerator as big as possible.
-            var mainShift = myMan.shiftLeftTo18()
+        // Make numerator as big as possible.
+        var mainShift = significand.shiftLeftTo18()
+        // Do division.
+        var remainderA = significand % rightSignificand
+        significand /= rightSignificand
+        // Make result as big as possible.
+        var shift = significand.shiftLeftTo18()
+        mainShift &+= shift
+        
+        while remainderA > 0 {
+            shift &-= remainderA.shiftLeftTo18()
+            if shift < -17 { break }
             
             // Do division.
-            var remainderA = myMan % otherMan
-            myMan /= otherMan
+            let remainderB = remainderA % rightSignificand
+            remainderA /= rightSignificand
             
-            // Make result as big as possible.
-            var shift = myMan.shiftLeftTo18()
-            mainShift &+= shift
+            remainderA.shift(decimalDigits: shift)
             
-            while remainderA > 0 {
-                shift &-= remainderA.shiftLeftTo18()
-                if shift < -17 { break }
-                
-                // Do division.
-                let remainderB = remainderA % otherMan
-                remainderA /= otherMan
-                
-                remainderA.shift(decimalDigits: shift)
-                
-                if remainderA == 0 { break }
-                myMan &+= remainderA
-                
-                remainderA = remainderB
-            }
+            if remainderA == 0 { break }
+            significand &+= remainderA
             
-            // Calculate new exponent.
-            myExp &-= rightExp &+ mainShift
-            
-            lhs.setComponents(myMan, myExp, lhs.isNegative != rhs.isNegative)
+            remainderA = remainderB
         }
+        
+        // Calculate new exponent.
+        let exponent = leftExponent &- (rightExponent &+ mainShift)
+        return .init(roundingSignificand: significand, exponent: exponent)
+    }
+    
+    @_transparent public static func /= (_ lhs: inout Self, _ rhs: Self) {
+        lhs = lhs / rhs
     }
 }
 
@@ -790,8 +853,8 @@ extension Decimal64 {
     ///
     /// - parameter rule: The rounding rule to use.
     /// - parameter scale: The number of digits a rounded value should have after its decimal point. It must be zero or a positive number; otherwise, the program will crash.
-    public mutating func round(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero, scale: Int = 0) {
-        self._data = self.rounded(rule, scale: scale)._data
+    @_transparent public mutating func round(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero, scale: Int = 0) {
+        self = self.rounded(rule, scale: scale)
     }
     
     /// Rounds the value to an integral value using the specified rounding rule.
@@ -837,7 +900,7 @@ extension Decimal64 {
     }
     
     @_transparent public mutating func normalize() {
-        self._data = self.normalized()._data
+        self = self.normalized()
     }
     
     /// Makes the significand number as large as possible while making the exponent the smallest possible value (min is -256).
@@ -853,13 +916,9 @@ extension Decimal64 {
     /// The functions break the number into the integral and the fractional parts.
     /// - attention: The integral part have sign information; therefore, negative number will still contain the negative sign.
     /// - returns: Tuple containing the _whole_/integral and _decimal_/fractional part.
-    public func decomposed() -> (integral: Decimal64, fractional: Decimal64) {
+    @_transparent public func decomposed() -> (integral: Decimal64, fractional: Decimal64) {
         let integral = self.rounded(.towardZero, scale: 0)
-        var fractional = self - integral
-        
-        if fractional.isNegative {
-            fractional._data.negate()
-        }
+        let fractional = (self - integral).magnitude
         return (integral, fractional)
     }
     
@@ -921,173 +980,56 @@ extension Decimal64 {
         
         self.init(unsafeSignificand: (needsNegation) ? -absolute : absolute, exponent: exponent)
     }
-
-    /// Compute the sum of the absolute values of the receiving number and a second decimal number.
-    /// - parameter operand: The decimal number to add to the receiving number.
-    private mutating func add(_ operand: Decimal64) {
-        var rightSignificand = operand.significand
-        // If the right significand is 0, there is nothing to do.
-        guard rightSignificand != 0 else { return }
-        
-        var leftExponent = self.exponent
-        var rightExponent = operand.exponent
-        var leftSignificand = self.significand
-
-        // If exponents are the same, just add the significands.
-        if leftExponent == rightExponent {
-            self = .init(roundingSignificand: leftSignificand &+ rightSignificand, exponent: leftExponent)
-        // If the left decimal number is too small, only the right number matters.
-        } else if (leftSignificand == 0) || (leftExponent < rightExponent &- 32) {
-            self = operand
-        // If (leftExponent - rightExponent) ∈ [-32, 32], then the numbers can be added.
-        } else if leftExponent <= rightExponent &+ 32 {
-            // If `rightExponent` is bigger than `leftExponent`, make `rightExponent` smaller.
-            if leftExponent < rightExponent {
-                rightExponent &-= rightSignificand.shiftLeftTo17(limit: min(17, rightExponent &- leftExponent))
-                // If after the shift, the exponents are still not the same...
-                if leftExponent != rightExponent {
-                    // ...and the `rightExponent` is much bigger than the `leftExponent`, ignore the left number.
-                    if rightExponent > leftExponent &+ 16 {
-                        self = operand
-                        return
-                    // ..`leftExponent` is still smaller than `rightExponent`, make it bigger.
-                    } else {
-                        leftSignificand /= Int64.tenToThePower(of: rightExponent &- leftExponent)
-                        leftExponent = rightExponent
-                    }
-                    
-                }
-            // If `leftExponent` is bigger than `rightExponent`, make `leftExponent` smaller.
-            } else {
-                leftExponent &-= leftSignificand.shiftLeftTo17(limit: min(17, leftExponent &- rightExponent))
-                // If after the shift, the exponents are still not the same...
-                if leftExponent != rightExponent {
-                    // ..and the `leftExponent` is much bigger than the `rightExponent`, ignore the right number.
-                    if leftExponent > rightExponent &+ 16 {
-                        return
-                    // ..`rightExponent` is still smaller than `leftExponent`, make it bigger.
-                    } else {
-                        rightSignificand /= Int64.tenToThePower(of: leftExponent &- rightExponent)
-                    }
-                }
-            }
-
-            // Now both exponents are equal.
-            self = .init(roundingSignificand: leftSignificand &+ rightSignificand, exponent: leftExponent)
-        } // If the right number is too small, only the left number matters.
-    }
-
-    /// Subtract the absolute value of a `Decimal64` from the absolute value of the receiving number.
-    ///
-    /// The sign is flipped if the result is negative.
-    /// - parameter operand: Subtrahend
-    /// - parameter negative: flag if ... is negative
-    private mutating func subtract(_ operand: Decimal64) {
-        var rightSignificand = operand.significand
-        // If the right significand is 0, there is nothing to do.
-        guard rightSignificand != 0 else { return }
-        
-        var leftExponent = self.exponent
-        var rightExponent = operand.exponent
-        var leftSignificand = self.significand
-
-        // If exponents are the same, just remove the right significand from the left significand.
-        if leftExponent == rightExponent {
-            self = .init(roundingSignificand: leftSignificand &- rightSignificand, exponent: leftExponent)
-        // If the left decimal number is too small, only the right number matters.
-        } else if (leftSignificand == 0) || (leftExponent < rightExponent &- 32) {
-            self = .init(unsafeSignificand: -rightSignificand, exponent: rightExponent)
-        // If (leftExponent - rightExponent) ∈ [-32, 32], then the numbers can be subtracted.
-        } else if leftExponent <= rightExponent &+ 32 {
-            // If `rightExponent` is bigger than `leftExponent`, make `rightExponent` smaller.
-            if leftExponent < rightExponent {
-                rightExponent &-= rightSignificand.shiftLeftTo17(limit: min(17, rightExponent &- leftExponent));
-                // If after the shift, the exponents are still not the same...
-                if leftExponent != rightExponent {
-                    // ...and the `rightExponent` is much bigger than the `leftExponent`, ignore the left number.
-                    if rightExponent > leftExponent &+ 16 {
-                        // This is too small, therefore difference is completely -sign * |NumB|.
-                        self = .init(unsafeSignificand: -rightSignificand, exponent: rightExponent)
-                        return
-                    // ..`leftExponent` is still smaller than `rightExponent`, make it bigger.
-                    } else {
-                        leftSignificand /= Int64.tenToThePower(of: rightExponent &- leftExponent)
-                        leftExponent = rightExponent
-                    }
-                }
-            // If `leftExponent` is bigger than `rightExponent`, make `leftExponent` smaller.
-            } else {
-                leftExponent &-= leftSignificand.shiftLeftTo17(limit: min(17, leftExponent &- rightExponent))
-                // If after the shift, the exponents are still not the same...
-                if leftExponent != rightExponent {
-                    // ..and the `leftExponent` is much bigger than the `rightExponent`, ignore the right number.
-                    if leftExponent > rightExponent + 16 {
-                        return
-                    // ..`rightExponent` is still smaller than `leftExponent`, make it bigger.
-                    } else {
-                        rightSignificand /= Int64.tenToThePower(of: leftExponent &- rightExponent)
-                    }
-                }
-            }
-
-            // Now both exponents are equal.
-            self = .init(roundingSignificand: leftSignificand &- rightSignificand, exponent: leftExponent)
-        }  // If the right number is too small, only the left number matters.
-    }
 }
 
-private extension Decimal64 {
-    #warning("Delete me when completely replaced")
-    /// Given the components of a decimal number, this function rounds the overflowing numbers.
-    private mutating func setComponents(_ man: Significand, _ exp: Exponent, _ negate: Bool) {
-        var significand = man
-        var negate = negate
-        
-        if significand == .zero {
-            self = .zero
-            return
-        } else if significand < .zero {
-            significand = -significand
-            negate = !negate
-        }
-        
-        var exponent = exp
-        // Round the internal coefficient to a maximum of 16 digits.
-        if significand >= Int64.powerOf10.16  {
-            if significand < Int64.powerOf10.17  {
-                significand &+= 5
-                significand /= 10
-                exponent &+= 1
-            } else if significand < Int64.powerOf10.18 {
-                significand &+= 50
-                significand /= 100
-                exponent &+= 2
-            } else {
-                // Adding 500 may cause an overflow in signed Int64.
-                significand += 500
-                significand /= 1000
-                exponent &+= 3
-            }
-        }
-        
-        self._data = significand << Self.exponentBitCount
-        
-        // try denormalization if possible
-        if exponent > 253 {
-            exponent &-= self._data.shiftLeftTo16() //TODO: numbers with exponent > 253 may be denormalized to much
-            self._data |= Int64(exponent)
-        } else if  exponent < -256 {
-            self._data.shift(decimalDigits: exponent &+ 256)
-            
-            if self._data != 0 {
-                self._data |= -256
-            }
-        } else if exponent != 0 {
-            self._data |=  (InternalStorage(exponent) & Self.exponentMask)
-        }
-        
-        if negate {
-            self._data = -self._data
-        }
-    }
-}
+//private mutating func setComponents(_ man: Significand, _ exp: Exponent, _ negate: Bool) {
+//    var significand = man
+//    var negate = negate
+//
+//    if significand == .zero {
+//        self = .zero
+//        return
+//    } else if significand < .zero {
+//        significand = -significand
+//        negate = !negate
+//    }
+//
+//    var exponent = exp
+//    // Round the internal coefficient to a maximum of 16 digits.
+//    if significand >= Int64.powerOf10.16  {
+//        if significand < Int64.powerOf10.17  {
+//            significand &+= 5
+//            significand /= 10
+//            exponent &+= 1
+//        } else if significand < Int64.powerOf10.18 {
+//            significand &+= 50
+//            significand /= 100
+//            exponent &+= 2
+//        } else {
+//            // Adding 500 may cause an overflow in signed Int64.
+//            significand += 500
+//            significand /= 1000
+//            exponent &+= 3
+//        }
+//    }
+//
+//    self._data = significand << Self.exponentBitCount
+//
+//    // try denormalization if possible
+//    if exponent > 253 {
+//        exponent &-= self._data.shiftLeftTo16() //TODO: numbers with exponent > 253 may be denormalized to much
+//        self._data |= Int64(exponent)
+//    } else if  exponent < -256 {
+//        self._data.shift(decimalDigits: exponent &+ 256)
+//
+//        if self._data != 0 {
+//            self._data |= -256
+//        }
+//    } else if exponent != 0 {
+//        self._data |=  (InternalStorage(exponent) & Self.exponentMask)
+//    }
+//
+//    if negate {
+//        self._data = -self._data
+//    }
+//}
