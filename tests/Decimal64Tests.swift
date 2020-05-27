@@ -54,14 +54,25 @@ extension Decimal64Test {
             Decimal64(-3333, power: -3)!, Decimal64(-1, power: 0)!, Decimal64(-5, power: -1)!, Decimal64(-1, power: -1)!, .zero,
             Decimal64(1, power: -1)!, Decimal64(5, power: -1)!, Decimal64(1, power: 0)!, Decimal64(3333, power: -3)!
         ]
-        XCTAssertEqual(result, left)
+        XCTAssertEqual(left, result)
         
         let right = [
             Decimal64(-33330, power: -4)!, Decimal64(-100, power: -2)!, Decimal64(-5000, power: -4)!, Decimal64(-10, power: -2)!, Decimal64(0, power: 10)!,
             Decimal64(100, power: -3)!, Decimal64(50, power: -2)!, Decimal64(10, power: -1)!, Decimal64(333300, power: -5)!
         ]
-        XCTAssertEqual(result, right)
+        XCTAssertEqual(right, result)
         XCTAssertEqual(left, right)
+        
+        let leftTau = Decimal64(6283185307179580, power: -15)!
+        let rightTau = Decimal64(628318530717958, power: -14)!
+        XCTAssertEqual(leftTau, rightTau)
+    }
+    
+    func testComparable() {
+        let left:  [Decimal64] = ["-3.333", "-1",  "-0.5", "-0.1", "0", "0.1", "0.5", "1", "3.333"]
+        let right: [Decimal64] = ["+3.333", "-1", "-0.51",    "0", "0",  "-7", "789", "1", "3.3333"]
+        let lessComparison: [Bool] = [true, false,  false,   true, false, false, true, false, true]
+        XCTAssertEqual(zip(left, right).map { $0 < $1 }, lessComparison)
     }
     
     /// Tests the negation operator.
@@ -89,27 +100,16 @@ extension Decimal64Test {
     
     func testSum() {
         let left: [Decimal64] = [-.pi, "-10", "-3.14", .zero, "10"]
+        print(left)
         print(left.map { $0 + 2 })
     }
     
     /// Tests the decimal shifting operators.
-//    func testDecimalShifting() {
-//        let first: Decimal64 = 1
-//        print("\(first): \(first._data.binary)")
-//        print("\tsignificand: \(first.significand)")
-//        print("\texponent:    \(first.exponent)")
-//        print("\top: \(first >> 1)")
-//
-//        let second: Decimal64 = -10
-//        print("\(second): \(second._data.binary)")
-//        print("\tsignificand: \(second.significand)")
-//        print("\texponent:    \(second.exponent)")
-//        print("\top: \(second >> 1)")
-//
-//        let numbers: [Decimal64] = [.pi, -.tau, .zero, "-10", "10"]
-//        print(numbers)
-//        print(numbers.map { $0 >> 1 })
-//    }
+    func testDecimalShifting() {
+        let numbers: [Decimal64] = [.pi, -.tau, .zero, "-10", "10"]
+        print(numbers)
+        print(numbers.map { $0 >> 3 })
+    }
 }
 
 extension Decimal64Test {

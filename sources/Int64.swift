@@ -87,47 +87,47 @@ internal extension Int64 {
     /// - parameter limit: Maximum number of decimal digits to shift, must not be larger than 17.
     /// - returns: Count of shifted digits.
     mutating func shiftLeftTo17(limit: Int) -> Int {
-        if self < Int64.tenToThePower(of:17 - limit) {
-            // num will not overflow if pushed left
+        // If the receiving number is less than 10^boundary, the number won't overflow if pushed to the left a `limit` number of times.
+        if self < Int64.tenToThePower(of: 17 - limit) {
             self *= Int64.tenToThePower(of: limit)
             return limit
         }
         
-        var result = 0
+        // Otherwise, the receiving number will overflow if pushed left; therefore, just shift to 17 decimal digits.
+        var shift = 0
         
-        // num will overflow if pushed left, just shift to 17 digits
         if self < Int64.powerOf10.8 {
             if self < Int64.powerOf10.4 {
-                result = 13
+                shift = 13
                 self *= Int64.powerOf10.13
             } else {
-                result = 9
+                shift = 9
                 self *= Int64.powerOf10.9
             }
         } else {
             if self < Int64.powerOf10.12 {
-                result = 5
+                shift = 5
                 self *= Int64.powerOf10.5
             } else if self < Int64.powerOf10.16 {
-                result = 1
+                shift = 1
                 self *= 10
             }
         }
         
         if self < Int64.powerOf10.16 {
             if self < Int64.powerOf10.14 {
-                result += 3
+                shift += 3
                 self *= 1000
             } else if self < Int64.powerOf10.15 {
-                result += 2
+                shift += 2
                 self *= 100
             } else {
-                result += 1
+                shift += 1
                 self *= 10
             }
         }
         
-        return result
+        return shift
     }
     
     /// Shifts the receiving number to the left until it fills 17 decimal digits or number of shifted decimal digits reaches 16 (whatever comes first).
