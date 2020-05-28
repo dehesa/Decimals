@@ -1,71 +1,64 @@
-# Comparison of decimal floating-point types in Swift
+This library provides:
+- `Decimal64`: Custom decimal number value type of 64-bit size. It supports up to 16 decimal digits of accuracy.
+- `DecimalFP64`: IEEE 754 compliant decimal number value type of 64-bit size. It supports up to 16 decimal digits of accuracy.
+- Conversion to and from Swift number types to decimal numbers.
 
-This is a small project which compares two different implementations for a Swift `Decimal64` struct against the builtin types Double and Decimal.
+## Types
 
-## DecimalFP64
+- `Decimal64`.
 
-This is a struct which conforms to the `FloatingPoint` protocol. (It compiles fine but not all functions are implemented)
-It tries to follow IEEE 754 as closely as possible and supports +/- Infinity, signed zeros and NaNs.
+  Custom decimal number value type focused on speed. It conforms to `SignedNumeric`, `Strideable`, but not `FloatingPoint`. It has no support for `+`/`-` Infinity and ignores NaNs.
 
-Internal structure:
+  ```swift
+  let pi: Decimal64 = .pi
+  let multiplier: Decimal64 = 2.5
+  let bias = Decimal64(7, power: 3)  // 7 * 10^3
+  let divisor: Decimal64 = "0.953"   // Supports string-number conversion
+  let resultA = pi * multiplier + bias / divisor
+  let resultB = resultA >> 2         // Divide by 100 (i.e. 10^-2)
+  ```
 
-Part | Bits | Comment 
--|-|-
-Sign | 63          | separate bit
-Exponent | 54..62  | with room for NaN and Inf
-Significand | 0..53| 16 decimal digits
+  The decimal number uses an internal 64-bit composed of two values: significand and exponent. Decimal numbers use the formula `significand * 10 ^ exponent`. The internal values use two's complement.
 
+  <p align="center">
+    <img src="docs/assets/Decimal64.svg" alt="Decimal64">
+  </p>
 
-## Decimal64
+- `DecimalFP64`.
 
-This struct doesn't conform to the `FloatingPoint` protocol and uses a different internal representation of the numbers.
-It has no support for +/- Infinity, uses a 2's complement for negative numbers (i.e. no signed zeros) and ignores NaNs.
+  Decimal number conforming to the `FloatingPoint` trying to follow IEEE 754 as closely as possible and supports `+`/`-` Infinity, signed zeros, and NaNs.
 
-Internal structure:
+  The decimal number uses an internal 64-bit composed of three values: exponent, sign, and significand. Decimal numbers use the formula `sign * significand * 10 ^ exponent`.
 
-Part | Bits | Comment
--|-|-
-Significand | 9..63 | 16 decimal digits and sign
-Exponent | 0..8 | 
+  <p align="center">
+    <img src="docs/assets/DecimalFP64.svg" alt="DecimalFP64">
+  </p>
 
-## Decimal (builtin, for reference)
+  > `DecimalFP64` is a work-in-progress and it still lacks some functionality. Don't use it in production code.
 
-This is an Apple provided struct with 160bit. Does not conform to the `FloatingPoint` protocol.
+- Foundation's `Decimal`.
 
-## Double (builtin, for reference)
+  Reference decimal number type of 160-bit size. It is implemented in Objective-C which doesn't conform to `FloatingPoint`. It is not very good for performant sensitive processing (overhead on retain/release and general processing).
 
-Internal floating-point type with 64bit.
+- Swift's `Double`.
 
-# Performance
+  Value binary floating-point type with 64-bit backed by fast hardware support. As it is well known, binary floating points are unable to express certain decimal numbers.
 
-To test the performance of a few basic operations (+,*,/ and conversion to string)
-a small benchmark was used to compare the four different types.
+## Performance
 
-As `Double` and `DecimalFP64` both conformed to the `FloatingPoint` protocol, these were tested with a generic version too.
+This Swift package contains a small benchmarking command-line application. The benchmark measures the performance of a few basic operations (`+`, `*`, `/`, and string conversion) for the previously defined floating-point types: `Decimal64`, `DecimalFP64`, `Decimal`, and `Double`.
 
-Testing was concluded with Xcode 10.2.1 on an iMac (Retina 5K, 27", 2017) with 4.2 GHz Intel Core i7 and macOS Mojave 10.14.5
+The results vary depending on the host machine and OS, but in the author's machine (compiling for release):
 
-**Update** for version v1.1: `Decimal64` and `DecimalFP64` now conform to the `TextOutputStreamable` protocol.
+|          Type         | Duration (secs) |
+|-----------------------|:--------:|
+`Double`                | 1.381
+`Decimal`               | 5.137
+`DecimalFP64`           | 1.087
+`Decimal64`             | 1.026
+`Double` (generic)      | 1.823
+`DecimalFP64` (generic) | 1.786
 
-Number Type                  | Debug  | Release | rel.  | Debug v1.1 | Release v1.1 | rel. 
--|-|-|-|-|-|-
-`Double`                            | 0.100s | 0.094s |  -5%  | 0.102s | 0.095s | -9%
-`Decimal`                          | 0.427s | 0.417s |  -2%   | 0.427s | 0.417s | -3%
-`DecimalFP64`                  | 0.784s | 0.101s | -87%  | 0.481s | 0.079s | -84%
-`Decimal64`                      |  0.543s | 0.102s | -81% | 0.521s | 0.078s | -85%
-`Double` (generic)             | 0.137s | 0.124s |  -8%   | 0.137s | 0.125s | -10%
-`DecimalFP64` (generic)   | 0.850s | 0.151s | -82%  | 0.529s | 0.110s | -79%
-
-Key findings v1.0:
-- The debug performance didn't look very promising, but llvm can optimize this code very well.
-- The difference between the two new implementations is negligible.
-- There is a very bad performance penalty if someone tries to use numbers in a generic way.
-  (i.e. protocol witness overhead)
-  **Update**
-  After discussion on https://forums.swift.org/t/performance-overhead-for-protocols/27104 Joe Groff opened https://bugs.swift.org/browse/SR-11158 (i.e. rdar://problem/53285593)
-- The own implementation is just 5% slower than the builtin `Double` (which is unsuitable for most currency calculations)
-
-Key findings v1.1:
-- I have never heard of `TextOutputStreamable` before. (Thanks Brent!) This is tremendous performance benefit.
-- `DecimalFP64` and `Decimal64` are now faster than `Double`. They need 18% less time to complete the benchmark test.
-- The performance difference to `Decimal` is even higher: The benchmark test is completed in 1/5th of the time.
+Be sure to compile and run for release. It doesn't make sense to measure performance with debug configuration for several reasons:
+- The Swift Standard Library and Foundation linked are already compiled for release.
+- The provided decimal numbers heavily rely on inlineable functionality and Swift optimizations.

@@ -173,4 +173,10 @@ extension Decimal64Test {
             XCTAssertEqual(d.fractional, output.fractional)
         }
     }
+    
+    func testSomething() {
+        print(Decimal64.tau)
+        print(Decimal64.tau << 2)
+        print(Decimal64.tau >> 2)
+    }
 }
