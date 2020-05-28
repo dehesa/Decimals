@@ -317,11 +317,10 @@ internal extension Int64 {
     
     /// Converts number to decimal and produces the string.
     ///
-    /// It returns  a pointer to the beginning of the string. No leading zeros are produced, and no terminating null is produced.
-    /// The low-order digit of the result always occupies memory position end-1.
-    /// The behavior is undefined if number is negative. A single zero digit is produced if number is 0.
+    /// The low-order digit of the result always occupies memory position `end-1`.
+    /// - attention: The behavior is undefined if number is negative. A single zero digit is produced if number is 0.
     /// - parameter end: Pointer to the end of the buffer.
-    /// - returns: Pointer to beginning of the string.
+    /// - returns: Pointer to the beginning of the string. No leading zeros are produced, and no terminating null is produced.
     func toString(end: UnsafeMutableRawPointer) -> UnsafeMutablePointer<UInt8> {
         var x = self
         var result = end

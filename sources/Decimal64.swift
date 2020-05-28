@@ -214,7 +214,7 @@ extension Decimal64: AdditiveArithmetic {
                 // If after the shift, the exponents are still not the same...
                 if leftExponent != rightExponent {
                     // ..and the `leftExponent` is much bigger than the `rightExponent`, ignore the right number.
-                    if leftExponent > rightExponent + 16 {
+                    if leftExponent > rightExponent &+ 16 {
                         return lhs
                     // ..`rightExponent` is still smaller than `leftExponent`, make it bigger.
                     } else {
@@ -253,37 +253,42 @@ extension Decimal64: Numeric {
         var (leftHigh, rightHigh) = (lhs.significand, rhs.significand)
         if (leftHigh == .zero) || (rightHigh == .zero) { return .zero }
         
+        let (leftNegative, rightNegative) = (leftHigh < .zero, rightHigh < .zero)
+        if leftNegative { leftHigh.negate() }
+        if rightNegative { rightHigh.negate() }
+        
         let (leftLow, rightLow) = (leftHigh % Int64.powerOf10.8, rightHigh % Int64.powerOf10.8)
         leftHigh /= Int64.powerOf10.8
         rightHigh /= Int64.powerOf10.8
         
-        var (high, mid) = (leftHigh * rightHigh, leftHigh * rightLow + leftLow * rightHigh)
+        var (high, mid) = (leftHigh * rightHigh, leftHigh * rightLow &+ leftLow * rightHigh)
         var significand = leftLow * rightLow
         let shift: Int
         
         if high > 0 {
             // Make high as big as possible.
-            shift = 16 - high.shiftLeftTo17Limit16()
+            shift = 16 &- high.shiftLeftTo17Limit16()
             
-            if (shift > 8) {
-                mid /= Int64.tenToThePower(of: shift - 8)
+            if shift > 8 {
+                mid /= Int64.tenToThePower(of: shift &- 8)
                 significand /= Int64.tenToThePower(of: shift)
             } else {
-                mid *= Int64.tenToThePower(of: 8 - shift)
+                mid *= Int64.tenToThePower(of: 8 &- shift)
                 significand /= Int64.tenToThePower(of: shift)
             }
             
-            significand += high + mid
+            significand &+= high &+ mid
         } else if mid > 0 {
             // Make mid as big as possible.
-            shift = 8 - mid.shiftLeftTo17Limit8()
+            shift = 8 &- mid.shiftLeftTo17Limit8()
             significand /= Int64.tenToThePower(of: shift)
-            significand += mid
+            significand &+= mid
         } else {
             shift = 0
         }
         
-        let exponent = lhs.exponent + (rhs.exponent &+ shift)
+        let exponent = lhs.exponent &+ (rhs.exponent &+ shift)
+        if leftNegative != rightNegative { significand.negate() }
         return .init(roundingSignificand: significand, exponent: exponent)
     }
     
@@ -367,16 +372,21 @@ extension Decimal64 /*: FloatingPoint*/ {
     //
     public static func / (_ lhs: Decimal64, _ rhs: Decimal64) -> Decimal64 {
         let rightSignificand = rhs.significand
-        guard rightSignificand != 0 else { fatalError() }
+        precondition(rightSignificand != .zero)
         
-        var significand = lhs.significand
+        let leftSignificand = lhs.significand
+        let (leftNegative, rightNegative) = (leftSignificand < .zero, rightSignificand < .zero)
+        
+        var significand = leftSignificand
+        if leftNegative { significand.negate() }
+        let divisor = rightNegative ? -rightSignificand : rightSignificand
         let (leftExponent, rightExponent) = (lhs.exponent, rhs.exponent)
         
         // Make numerator as big as possible.
         var mainShift = significand.shiftLeftTo18()
         // Do division.
-        var remainderA = significand % rightSignificand
-        significand /= rightSignificand
+        var remainderA = significand % divisor
+        significand /= divisor
         // Make result as big as possible.
         var shift = significand.shiftLeftTo18()
         mainShift &+= shift
@@ -385,9 +395,8 @@ extension Decimal64 /*: FloatingPoint*/ {
             shift &-= remainderA.shiftLeftTo18()
             if shift < -17 { break }
             
-            // Do division.
-            let remainderB = remainderA % rightSignificand
-            remainderA /= rightSignificand
+            let remainderB = remainderA % divisor
+            remainderA /= divisor
             
             remainderA.shift(decimalDigits: shift)
             
@@ -399,6 +408,7 @@ extension Decimal64 /*: FloatingPoint*/ {
         
         // Calculate new exponent.
         let exponent = leftExponent &- (rightExponent &+ mainShift)
+        if leftNegative != rightNegative { significand.negate() }
         return .init(roundingSignificand: significand, exponent: exponent)
     }
     
@@ -444,15 +454,15 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
         
         // check integer part
         while isDigit(c) && (numDigits < 18) {
-            numDigits += 1
+            numDigits &+= 1
             significand *= 10
-            significand += Int64(c!.asciiValue! - 48)
+            significand &+= Int64(c!.asciiValue! &- 48)
             c = iterator.next()
         }
         
         // maybe we have more digits for our precision
         while isDigit(c) {
-            exponent += 1
+            exponent &+= 1
             c = iterator.next()
         }
         
@@ -462,16 +472,16 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
             
             if significand == 0 {
                 while c != nil && c! == "0" {
-                    exponent -= 1
+                    exponent &-= 1
                     c = iterator.next()
                 }
             }
             
             while isDigit(c) && (numDigits < 18) {
-                numDigits += 1
-                exponent -= 1
+                numDigits &+= 1
+                exponent &-= 1
                 significand *= 10
-                significand += Int64(c!.asciiValue! - 48)
+                significand &+= Int64(c!.asciiValue! &- 48)
                 c = iterator.next()
             }
             
@@ -501,13 +511,13 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
             }
             
             while isDigit(c) && (numDigits < 3) {
-                numDigits += 1
+                numDigits &+= 1
                 e *= 10
-                e += Int(c!.asciiValue!) - 48
+                e &+= Int(c!.asciiValue!) &- 48
                 c = iterator.next()
             }
             
-            exponent += e * expSign
+            exponent &+= e * expSign
             
             if isDigit(c) {
                 while isDigit(c) {
@@ -864,7 +874,7 @@ extension Decimal64 {
         precondition(scale >= 0)
         
         let exponent = self.exponent
-        let shift = -(exponent + scale)
+        let shift = -(exponent &+ scale)
         guard shift > 0 else { return self }
         
         var significand = self.significand
@@ -909,7 +919,7 @@ extension Decimal64 {
         guard significand != 0 else { return Self.zero }
         
         var exponent = self.exponent
-        exponent -= significand.toMaximumDigits()
+        exponent &-= significand.toMaximumDigits()
         return .init(unsafeSignificand: significand, exponent: exponent)
     }
     
@@ -948,11 +958,8 @@ extension Decimal64 {
     private init(roundingSignificand significand: Significand, exponent: Exponent) {
         guard significand != .zero else { self = .zero; return }
         
-        var (absolute, exponent, needsNegation) = (significand, exponent, false)
-        if significand < .zero {
-            absolute.negate()
-            needsNegation = true
-        }
+        var (absolute, exponent) = (significand, exponent)
+        if significand < .zero { absolute.negate() }
         
         // Round the internal coefficient to a maximum of 16 digits.
         if absolute >= Int64.powerOf10.16  {
@@ -972,64 +979,20 @@ extension Decimal64 {
             }
         }
         
-        // try denormalization if possible
-        if exponent < -256 || exponent > 253 {
-            #warning("Add denormalization back")
-            fatalError()
+        // Try denormalization if possible
+        // TODO: Improve performance.
+        if exponent > 253 {
+            absolute <<= Self.exponentBitCount
+            exponent &-= absolute.shiftLeftTo16() //TODO: numbers with exponent > 253 may be denormalized to much
+            absolute >>= Self.exponentBitCount
+        } else if exponent < -256 {
+            absolute <<= Self.exponentBitCount
+            absolute.shift(decimalDigits: exponent &+ 256)
+            if absolute != .zero { absolute |= -256 }
+            absolute >>= Self.exponentBitCount
         }
         
-        self.init(unsafeSignificand: (needsNegation) ? -absolute : absolute, exponent: exponent)
+        if significand < .zero { absolute.negate() }
+        self.init(unsafeSignificand: absolute, exponent: exponent)
     }
 }
-
-//private mutating func setComponents(_ man: Significand, _ exp: Exponent, _ negate: Bool) {
-//    var significand = man
-//    var negate = negate
-//
-//    if significand == .zero {
-//        self = .zero
-//        return
-//    } else if significand < .zero {
-//        significand = -significand
-//        negate = !negate
-//    }
-//
-//    var exponent = exp
-//    // Round the internal coefficient to a maximum of 16 digits.
-//    if significand >= Int64.powerOf10.16  {
-//        if significand < Int64.powerOf10.17  {
-//            significand &+= 5
-//            significand /= 10
-//            exponent &+= 1
-//        } else if significand < Int64.powerOf10.18 {
-//            significand &+= 50
-//            significand /= 100
-//            exponent &+= 2
-//        } else {
-//            // Adding 500 may cause an overflow in signed Int64.
-//            significand += 500
-//            significand /= 1000
-//            exponent &+= 3
-//        }
-//    }
-//
-//    self._data = significand << Self.exponentBitCount
-//
-//    // try denormalization if possible
-//    if exponent > 253 {
-//        exponent &-= self._data.shiftLeftTo16() //TODO: numbers with exponent > 253 may be denormalized to much
-//        self._data |= Int64(exponent)
-//    } else if  exponent < -256 {
-//        self._data.shift(decimalDigits: exponent &+ 256)
-//
-//        if self._data != 0 {
-//            self._data |= -256
-//        }
-//    } else if exponent != 0 {
-//        self._data |=  (InternalStorage(exponent) & Self.exponentMask)
-//    }
-//
-//    if negate {
-//        self._data = -self._data
-//    }
-//}

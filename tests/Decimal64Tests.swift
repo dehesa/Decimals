@@ -89,18 +89,16 @@ extension Decimal64Test {
     func testMultiplication() {
         let left:  [Decimal64] = ["-3.333",     "-1",  "-0.5", "-0.1", 0,  "0.1",   "0.5", 1,     "3.333", .pi]
         let right: [Decimal64] = ["+3.333",     "-1", "-0.51",      0, 0,   "-7",   "789", 1,    "3.3333",  -2]
-        let result: [Decimal64] = ["-11.108889", "1", "0.255",      0, 0, "-0.7", "394.5", 1, "11.1098889", "6.283185307179586"]
+        let result: [Decimal64] = ["-11.108889", "1", "0.255",      0, 0, "-0.7", "394.5", 1, "11.1098889", "-6.283185307179586"]
         XCTAssertEqual(zip(left, right).map { $0 * $1 }, result)
     }
     
     /// Tests the division operator.
     func testDivision() {
-//        let left:  [Decimal64] = ["-3.333",     "-1",  "-0.5", "-0.1",  "0.1",   "0.5", 1,     "3.333", .pi]
-//        print(left.map { $0 / $0 })
-        
-        let n: Decimal64 = "-3.333"
-        let d: Decimal64 = "1"
-        print(n / d)
+        let left:  [Decimal64] = ["-3.333", "-1", "-0.5", "-0.1", "0.1", "0.5", 1, "3.333", .pi]
+        XCTAssertEqual(left.map { $0 / $0 }, Array(repeating: 1, count: left.count))
+        XCTAssertEqual(Decimal64.tau / Decimal64.pi, 2)
+        XCTAssertEqual(Decimal64(integerLiteral: -8) / 2, Decimal64(integerLiteral: -4))
     }
     
     /// Tests the negation operator.
