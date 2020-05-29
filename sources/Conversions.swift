@@ -17,7 +17,7 @@ extension BinaryFloatingPoint {
 //        let multiplier = Self.init(pow(10, Double(magnitude.exponent)))
 //        self *= multiplier
         
-        // TODO: Find out a better function.
+        // TODO: Find out a better accurate way to transform a decimal into a double.
         self.init(Double(value.description)!)
     }
 }

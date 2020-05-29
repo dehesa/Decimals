@@ -1,7 +1,18 @@
+<p align="center">
+    <img src="docs/assets/Logo.png" alt="Codable CSV"/>
+</p>
+
+<p align="center">
+    <a href="https://swift.org/about/#swiftorg-and-open-source"><img src="docs/assets/badges/Swift.svg" alt="Swift 5.x"></a>
+    <a href="http://doge.mit-license.org"><img src="docs/assets/badges/License.svg" alt="MIT License"></a>
+</p>
+
 This library provides:
 - `Decimal64`: Custom decimal number value type of 64-bit size. It supports up to 16 decimal digits of accuracy.
 - `DecimalFP64`: IEEE 754 compliant decimal number value type of 64-bit size. It supports up to 16 decimal digits of accuracy.
 - Conversion to and from Swift number types to decimal numbers.
+
+The decimal number types have no dependencies (not even Foundation) and work on any OS supporting Swift 5.1 or later.
 
 ## Types
 
@@ -50,14 +61,14 @@ This Swift package contains a small benchmarking command-line application. The b
 
 The results vary depending on the host machine and OS, but in the author's machine (compiling for release):
 
-|          Type         | Duration (secs) |
-|-----------------------|:--------:|
-`Double`                | 1.381
-`Decimal`               | 5.137
-`DecimalFP64`           | 1.087
-`Decimal64`             | 1.026
-`Double` (generic)      | 1.823
-`DecimalFP64` (generic) | 1.786
+|          Type         |Duration (secs)|
+|-----------------------|:-------------:|
+|`Decimal64`            |1.026
+|`DecimalFP64`          |1.087
+|`Double`               |1.381
+|`Decimal`              |5.137
+|`Double` (generic)     |1.823
+|`DecimalFP64` (generic)|1.786
 
 Be sure to compile and run for release. It doesn't make sense to measure performance with debug configuration for several reasons:
 - The Swift Standard Library and Foundation linked are already compiled for release.
