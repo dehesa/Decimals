@@ -4,7 +4,7 @@ import XCTest
 /// Tests decimal number regular cases.
 final class Decimal64Test: XCTestCase {
     override func setUp() {
-        self.continueAfterFailure = true
+        self.continueAfterFailure = false
     }
 }
 
@@ -70,10 +70,37 @@ extension Decimal64Test {
     
     /// Tests the _less-than_ operator.
     func testComparable() {
-        let left:  [Decimal64] = ["-3.333", "-1",  "-0.5", "-0.1", "0", "0.1", "0.5", "1", "3.333"]
-        let right: [Decimal64] = ["+3.333", "-1", "-0.51",    "0", "0",  "-7", "789", "1", "3.3333"]
-        let lessComparison: [Bool] = [true, false,  false,   true, false, false, true, false, true]
-        XCTAssertEqual(zip(left, right).map { $0 < $1 }, lessComparison)
+        let lhs: [Decimal64] = [
+            "-3.333",
+            "-1",
+            "-0.5",
+            "-0.1",
+            "0",
+            
+            "0.1",
+            "0.5",
+            "1",
+            "3.333",
+            Decimal64(800000000000000, power: -13)! // 80
+        ]
+        
+        let rhs: [Decimal64] = [
+            "+3.333",
+            "-1",
+            "-0.51",
+            "0",
+            .zero,
+            
+            "-7",
+            "789",
+            "1",
+            "3.3333",
+            .zero
+        ]
+        
+        let result: [Bool] = [true, false,  false, true, false,
+                              false, true, false,  true, false]
+        XCTAssertEqual(zip(lhs, rhs).map { $0 < $1 }, result)
     }
     
     /// Tests the `AdditiveArithmetic` protocol conformance.
@@ -172,11 +199,5 @@ extension Decimal64Test {
             XCTAssertEqual(d.integral, output.integral)
             XCTAssertEqual(d.fractional, output.fractional)
         }
-    }
-    
-    func testSomething() {
-        print(Decimal64.tau)
-        print(Decimal64.tau << 2)
-        print(Decimal64.tau >> 2)
     }
 }

@@ -95,30 +95,41 @@ extension Decimal64: Hashable {
 
 extension Decimal64: Comparable {
     public static func < (_ lhs: Self, _ rhs: Self) -> Bool {
-        if lhs._data == rhs._data { return false }
-        
-        let (leftNormal, rightNormal) = (lhs.normalized(), rhs.normalized())
-        let (leftExponent, rightExponent) = (leftNormal.exponent, rightNormal.exponent)
-        
-        if leftExponent == rightExponent {
-            return leftNormal.significand < rightNormal.significand
-        } else if leftExponent < rightExponent {
-            return !rightNormal.isNegative
-        } else {
-            return leftNormal.isNegative
+        let significand: (left: Significand, right: Significand) = (lhs.significand, rhs.significand)
+        // 1. If one or both numbers are zero, a straight significand comparison can be performed.
+        if significand.left == .zero || significand.right == .zero {
+            return significand.left < significand.right
         }
-    }
-    
-    @_transparent public static func > (_ lhs: Self, _ rhs: Self) -> Bool {
-        rhs < lhs
-    }
-    
-    @_transparent public static func >= (_ lhs: Self, _ rhs: Self) -> Bool{
-        !(lhs < rhs)
-    }
-    
-    @_transparent public static func <= (_ lhs: Self, _ rhs: Self) -> Bool {
-        !(rhs < lhs)
+        
+        // 2. At this point, none of the numbers are zero.
+        var absolute: (left: Significand, right: Significand, signFlipped: Bool) = (significand.left, significand.right, false)
+        // 3. If the left number is negative...
+        if significand.left < .zero {
+            // ...and the right number is positive. `<` returns true.
+            guard significand.right < .zero else { return true }
+            // 3.1. If both numbers are negative, change the sign for normalization (performed later).
+            absolute.left.negate(); absolute.right.negate(); absolute.signFlipped = true
+        // 4. If the left number is positive and the right number is negative, `<` returns false
+        } else if significand.right < .zero {
+            return false
+        }
+        
+        // 5. If this point is reached, both numbers have the same sign and are not zero.
+        var exponent: (left: Exponent, right: Exponent) = (lhs.exponent, rhs.exponent)
+        // 6. Normalize the absolute significands (i.e. shifts the significands to the left until it fills 16 decimal digits).
+        exponent.left -= absolute.left.absoluteNormalization()
+        exponent.right -= absolute.right.absoluteNormalization()
+        
+        var result: Bool
+        if exponent.left == exponent.right {
+            result = absolute.left < absolute.right
+            if absolute.signFlipped && absolute.left != absolute.right { result = !result }
+        } else {
+            result = exponent.left < exponent.right
+            if absolute.signFlipped { result = !result }
+        }
+        
+        return result
     }
 }
 
@@ -916,11 +927,17 @@ extension Decimal64 {
     /// Makes the significand number as large as possible while making the exponent the smallest possible value (min is -256).
     public func normalized() -> Self {
         var significand = self.significand
-        guard significand != 0 else { return Self.zero }
         
-        var exponent = self.exponent
-        exponent &-= significand.toMaximumDigits()
-        return .init(unsafeSignificand: significand, exponent: exponent)
+        let shift: Int
+        if significand > .zero {
+            shift = significand.absoluteNormalization()
+        } else if significand < .zero {
+            significand.negate()
+            shift = significand.absoluteNormalization()
+            significand.negate()
+        } else { return .zero }
+        
+        return .init(unsafeSignificand: significand, exponent: self.exponent - shift)
     }
     
     /// The functions break the number into the integral and the fractional parts.
@@ -932,12 +949,24 @@ extension Decimal64 {
         return (integral, fractional)
     }
     
-    /// Shifts to the left `shift` number of decimal digits.
+    /// Shifts to number to the left `shift` times, while maintining the decimal point position.
+    ///
+    /// Perform the same operation as `self * 10^n`
+    ///
+    ///     let tau: Decimal64 = 6.283185307179586
+    ///     let shifted = tau << 3  // 6283.185307179586
+    ///
     public static func << (_ lhs: Decimal64, _ shift: Int) -> Decimal64 {
         .init(roundingSignificand: lhs.significand, exponent: lhs.exponent &+ shift)
     }
     
     /// Shifts to the right `shift` number of decimal digits.
+    ///
+    /// Perform the same operation as `self / 10^n`
+    ///
+    ///     let tau: Decimal64 = 6.283185307179586
+    ///     let shifted = tau << 3  // 0.006283185307179586
+    ///
     public static func >> (_ lhs: Decimal64, _ shift: Int) -> Decimal64 {
         .init(roundingSignificand: lhs.significand, exponent: lhs.exponent &- shift)
     }

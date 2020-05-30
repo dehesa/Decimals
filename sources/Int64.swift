@@ -248,46 +248,46 @@ internal extension Int64 {
         
         return result
     }
-
-    /// Shifts a number to the left until it fills 16 digits.
-    /// - attention: The receiving number must not have more than 18 digits
+    
+    /// Shifts a positive non-zero number to the left until it fills 16 decimal digits.
+    /// - precondition: The receiving integer should be greater than zero.
+    /// - attention: The receiving number must not have more than 18 decimal digits
     /// - returns: Count of shifted digits.
-    @_transparent mutating func toMaximumDigits() -> Int {
-        guard self != 0 else { return 0 }
+    mutating func absoluteNormalization() -> Int {
+        assert(self > 0)
         
-        var (result, count) = (abs(self), 0)
+        var shift: Int = 0
         // self will overflow if pushed left, just shift to 16 digits
-        
-        if result < Int64.powerOf10.8 {
-            if result < Int64.powerOf10.4 {
-                count = 12
-                result &*= Int64.powerOf10.12
+
+        if self < Int64.powerOf10.8 {
+            if self < Int64.powerOf10.4 {
+                shift = 12
+                self &*= Int64.powerOf10.12
             } else {
-                count = 8
-                result &*= Int64.powerOf10.8
+                shift = 8
+                self &*= Int64.powerOf10.8
             }
         } else {
-            if result < Int64.powerOf10.12 {
-                count = 4
-                result &*= Int64.powerOf10.4
+            if self < Int64.powerOf10.12 {
+                shift = 4
+                self &*= Int64.powerOf10.4
             }
         }
-        
-        if result < Int64.powerOf10.14 {
-            if result < Int64.powerOf10.13 {
-                count &+= 3
-                result &*= 1000
+
+        if self < Int64.powerOf10.14 {
+            if self < Int64.powerOf10.13 {
+                shift &+= 3
+                self &*= 1000
             } else {
-                count &+= 2
-                result &*= 100
+                shift &+= 2
+                self &*= 100
             }
-        } else if result < Int64.powerOf10.15 {
-            count &+= 1
-            result &*= 10
+        } else if self < Int64.powerOf10.15 {
+            shift &+= 1
+            self &*= 10
         }
-        
-        self = (self < 0) ? -result : result
-        return count
+
+        return shift
     }
 }
 
