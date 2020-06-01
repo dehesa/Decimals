@@ -21,8 +21,9 @@ extension ConversionTests {
     /// Tests conversion from `Decimal64` to binary floating-point values.
     func testFloatingPointConversion() {
         let decimals: [Decimal64] = ["-876", "-123.5678201", "-0.1", "0", "0.7", "1", "32578.5678"]
-        let result: [Double]      = [-876, -123.5678201, -0.1, 0, 0.7, 1, 32578.5678]
-        XCTAssertEqual(decimals.map { Double($0) }, result)
+        let doubles: [Double]     = [-876, -123.5678201, -0.1, 0, 0.7, 1, 32578.5678]
+        XCTAssertEqual(decimals.map { Double($0) }, doubles)
+        XCTAssertEqual(doubles.map { Decimal64($0) }, decimals)
     }
     
     /// Test `Double` conversion.

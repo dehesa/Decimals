@@ -7,17 +7,32 @@ extension BinaryInteger {
     }
 }
 
-extension BinaryFloatingPoint {
+extension Float {
     /// Creates a new instance from the given value, rounded to the closest possible representation.
     public init(_ value: Decimal64) {
-//        // Not accurate enough.
-//        let magnitude = value.magnitude
-//        self.init(magnitude.significand)
-//
-//        let multiplier = Self.init(pow(10, Double(magnitude.exponent)))
-//        self *= multiplier
+        let (significand, exponent) = (Float(value.significand), value.exponent)
         
-        // TODO: Find out a better accurate way to transform a decimal into a double.
-        self.init(Double(value.description)!)
+        if exponent >= .zero {
+            let multiplier = pow(10.0, Float(exponent))
+            self = significand * multiplier
+        } else {
+            let divisor = pow(10.0, Float(-exponent))
+            self = Float(significand) / divisor
+        }
+    }
+}
+
+extension Double {
+    /// Creates a new instance from the given value, rounded to the closest possible representation.
+    public init(_ value: Decimal64) {
+        let (significand, exponent) = (Double(value.significand), value.exponent)
+
+        if exponent >= .zero {
+            let multiplier = pow(10.0, Double(exponent))
+            self = significand * multiplier
+        } else {
+            let divisor = pow(10.0, Double(-exponent))
+            self = Double(significand) / divisor
+        }
     }
 }

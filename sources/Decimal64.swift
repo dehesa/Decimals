@@ -377,6 +377,7 @@ extension Decimal64 /*: FloatingPoint*/ {
     }
     
     // It uses the following algorithm: `a = r0, f0*r0 = n0*b + r1, f1*r1 = n1*b + r2, ...` where `fi` are factors (power of 10) to make remainders `ri` as big as possible and `ni` are integers. Then with g a power of 10 to make `n0` as big as possible:
+    //
     //     a     1              g          g
     //     - = ---- * ( g*n0 + -- * n1 + ----- * n2 + ... )
     //     b   f0*g            f1        f1*f2
@@ -616,8 +617,7 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
                 else {
                     end += 1
                 }
-            }
-            else if exp + end - start > 16 {
+            } else if exp + end - start > 16 {
                 end -= 1
                 
                 exp &+= end - start //TODO: will it work on 64bit?
@@ -645,8 +645,7 @@ extension Decimal64: LosslessStringConvertible, CustomStringConvertible {
                     end += 1
                 }
                 _ = Int64(exp).toString(end: end)
-            }
-            else {
+            } else {
                 while exp > 0 {
                     end.pointee = 0x30 // 0
                     end += 1
@@ -829,16 +828,17 @@ extension Decimal64 {
     
     public init?(_ value: Double) {
         guard value.isFinite else { return nil }
+        guard !value.isZero else { self = .zero; return }
         
-        if value.isZero {
-            self = .zero
-        } else {
-            let val = Swift.abs(value)
-            let exp = Int(log10(val) - 15)
-            let man = Int64(val / pow(10.0, Double(exp)) + 0.5)
-            let significand: Significand = (value < 0) ? -man: man
-            self.init(significand, power: exp)
-        }
+        let absolute = Swift.abs(value)
+        let exponent = Int(log10(absolute) - 15)
+        guard (exponent >= Self.leastExponent) && (exponent <= Self.greatestExponent) else { return nil }
+        
+        var significand: Significand = .init(absolute * pow(10.0, Double(-exponent)) + 0.5)
+        guard significand < 10_000_000_000_000_000 else { return nil }
+        
+        if value < 0 { significand.negate() }
+        self.init(unsafeSignificand: significand, exponent: exponent)
     }
     
     /// Returns true if the represented decimal is a negative value.
@@ -903,17 +903,17 @@ extension Decimal64 {
             guard remainder < 0 else { break }
             significand &-= 1
         case .awayFromZero:
-            if remainder > 0 { significand &+= 1 } else
-            if remainder < 0 { significand &-= 1 }
+            if remainder > 0 { significand &+= 1 }
+            else if remainder < 0 { significand &-= 1 }
         case .toNearestOrAwayFromZero:
             guard abs(remainder) >= (divisor / 2) else { break }
-            if remainder > 0 { significand &+= 1 } else
-            if remainder < 0 { significand &-= 1 }
+            if remainder > 0 { significand &+= 1 }
+            else if remainder < 0 { significand &-= 1 }
         case .toNearestOrEven:
             let (rem, half) = (abs(remainder), divisor / 2)
             guard (rem > half) || ((rem == half) && ((significand & 1) != 0)) else { break }
-            if remainder > 0 { significand &+= 1 } else
-            if remainder < 0 { significand &-= 1 }
+            if remainder > 0 { significand &+= 1 }
+            else if remainder < 0 { significand &-= 1 }
         @unknown default:
             fatalError()
         }
