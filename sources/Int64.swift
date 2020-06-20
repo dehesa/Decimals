@@ -2,7 +2,8 @@ import Foundation
 
 internal extension Int64 {
     /// Cache for the first 18 values of 10 to the power of n (for performance purposes).
-    static let powerOf10 = (    1 as Int64, // 0
+     @usableFromInline static let powerOf10 = (
+                                1 as Int64, // 0
                                10 as Int64, // 1
                               100 as Int64, // 2
                             1_000 as Int64, // 3
@@ -24,7 +25,7 @@ internal extension Int64 {
     )
 
     /// Returns the result of `10^exponent`.
-    @_transparent static func tenToThePower(of exponent: Int) -> Int64 {
+    @_transparent @usableFromInline static func tenToThePower(of exponent: Int) -> Int64 {
         withUnsafeBytes(of: Self.powerOf10) {
             $0.baseAddress!.assumingMemoryBound(to: Int64.self)[exponent]
         }
