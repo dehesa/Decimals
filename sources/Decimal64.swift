@@ -251,7 +251,7 @@ extension Decimal64: AdditiveArithmetic {
 
 extension Decimal64: Numeric {
     @inlinable @_transparent public init?<T>(exactly source: T) where T: BinaryInteger {
-        guard source.magnitude < 10_000_000_000_000_000 else { return nil }
+        guard Int64(source.magnitude) < Int64(10_000_000_000_000_000) else { return nil }
         self.init(bitPattern: Int64(truncatingIfNeeded: source) << Self.exponentBitCount)
     }
     
@@ -816,9 +816,9 @@ extension Decimal64 {
     /// Creates a new decimal number with the representable value that's closest to the given integer.
     public init<I>(clamping source: I) where I:BinaryInteger {
         let value: Significand
-        if source > 10_000_000_000_000_000 {
+        if Int64(source) > Int64(10_000_000_000_000_000) {
             value = 10_000_000_000_000_000
-        } else if source < -10_000_000_000_000_000 {
+        } else if Int64(source) < Int64(-10_000_000_000_000_000) {
             value = -10_000_000_000_000_000
         } else {
             value = Significand(source)
