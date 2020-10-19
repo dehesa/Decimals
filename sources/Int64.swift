@@ -26,7 +26,7 @@ internal extension Int64 {
     /// Returns the result of `10^exponent`.
     @_transparent static func tenToThePower(of exponent: Int) -> Int64 {
         withUnsafeBytes(of: Self.powerOf10) {
-            $0.baseAddress!.assumingMemoryBound(to: Int64.self)[exponent]
+            $0.baseAddress.unsafelyUnwrapped.assumingMemoryBound(to: Int64.self)[exponent]
         }
     }
 }
