@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Decimals",
+    name: "sample-decimals-swift",
     products: [
         .library(name: "Decimals", targets: ["Decimals"]),
         .executable(name: "DecimalsBenchmarks", targets: ["DecimalsBenchmarks"])
