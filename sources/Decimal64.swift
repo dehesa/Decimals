@@ -72,13 +72,13 @@ extension Decimal64 {
 extension Decimal64: Equatable {
     public static func == (_ lhs: Self, _ rhs: Self) -> Bool {
         var (leftSignificand, rightSignificand) = (lhs.significand, rhs.significand)
-        guard leftSignificand != 0 else { return rightSignificand == 0 }
+        guard leftSignificand != .zero else { return rightSignificand == .zero }
         
         let diff = lhs.exponent &- rhs.exponent
-        if diff > 0 { // lhs has a greater exponent than rhs.
+        if diff > .zero { // lhs has a greater exponent than rhs.
             let shift = leftSignificand.shiftLeftTo17(limit: diff)
             guard shift == diff else { return false }
-        } else if diff < 0 { // lhs has a lesser exponent than rhs.
+        } else if diff < .zero { // lhs has a lesser exponent than rhs.
             let shift = rightSignificand.shiftLeftTo17(limit: -diff)
             guard shift == -diff else { return false }
         }
@@ -826,6 +826,21 @@ extension Decimal64 {
         self.init(bitPattern: value << Self.exponentBitCount)
     }
     
+    public init?(_ value: Float) {
+        guard value.isFinite else { return nil }
+        guard !value.isZero else { self = .zero; return }
+        
+        let absolute = Swift.abs(value)
+        let exponent = Int(log10(absolute) - 15)
+        guard (exponent >= Self.leastExponent) && (exponent <= Self.greatestExponent) else { return nil }
+        
+        var significand = Significand(absolute * pow(10.0, Float(-exponent)) + 0.5)
+        guard significand < 10_000_000_000_000_000 else { return nil }
+        
+        if value < 0 { significand.negate() }
+        self.init(unsafeSignificand: significand, exponent: exponent)
+    }
+    
     public init?(_ value: Double) {
         guard value.isFinite else { return nil }
         guard !value.isZero else { self = .zero; return }
@@ -834,7 +849,7 @@ extension Decimal64 {
         let exponent = Int(log10(absolute) - 15)
         guard (exponent >= Self.leastExponent) && (exponent <= Self.greatestExponent) else { return nil }
         
-        var significand: Significand = .init(absolute * pow(10.0, Double(-exponent)) + 0.5)
+        var significand = Significand(absolute * pow(10.0, Double(-exponent)) + 0.5)
         guard significand < 10_000_000_000_000_000 else { return nil }
         
         if value < 0 { significand.negate() }

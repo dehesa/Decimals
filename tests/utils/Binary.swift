@@ -3,13 +3,13 @@ extension BinaryInteger {
     internal var binary: String {
         var binaryString = ""
         var internalNumber = self
-        var counter = 0
+        var counter = Int.zero
         
         for _ in (1...self.bitWidth) {
             binaryString.insert(contentsOf: "\(internalNumber & 1)", at: binaryString.startIndex)
             internalNumber >>= 1
             counter += 1
-            if counter % 4 == 0 {
+            if counter % 4 == .zero {
                 binaryString.insert(contentsOf: " ", at: binaryString.startIndex)
             }
         }
